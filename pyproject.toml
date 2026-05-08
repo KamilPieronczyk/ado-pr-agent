@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ado-ai-pr-review"
+version = "0.1.0"
+description = "Azure DevOps CLI-first AI pull request reviewer"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "azure-identity>=1.21.0",
+  "langfuse>=2.60.0",
+  "openai>=1.99.0",
+  "pydantic>=2.11.0",
+  "pyyaml>=6.0.2",
+  "typer>=0.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.15.0",
+  "pytest>=8.3.0",
+  "pytest-mock>=3.14.0",
+  "ruff>=0.9.0",
+]
+
+[project.scripts]
+ado-ai-pr-review = "ado_ai_pr_review.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ado_ai_pr_review"]
