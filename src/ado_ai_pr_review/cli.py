@@ -11,7 +11,6 @@ from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.commands import CommandRouter
 from ado_ai_pr_review.config import ReviewConfig
 from ado_ai_pr_review.context import ContextSelector
-from ado_ai_pr_review.diff import parse_changed_files
 from ado_ai_pr_review.git_toolset import GitToolset
 from ado_ai_pr_review.indexer import RepoIndexer
 from ado_ai_pr_review.logging_config import configure_logging
@@ -63,10 +62,9 @@ def run_worker(context: RuntimeContext, dry_run: bool) -> ReviewCommand:
         return decision.command
 
     git.fetch()
-    refspec = "origin/main...HEAD"
+    target_ref = context.target_branch.removeprefix("refs/heads/")
+    refspec = f"origin/{target_ref}...HEAD"
     diff_text = git.diff(refspec, unified=0)
-    changed_files = parse_changed_files(git.name_status(refspec))
-    _ = changed_files
 
     scanner = SecurityScanner()
     local_findings, redacted_diff = scanner.scan_diff(diff_text)

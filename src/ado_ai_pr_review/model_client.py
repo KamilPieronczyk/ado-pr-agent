@@ -32,7 +32,9 @@ def build_openai_client() -> OpenAI:
         DefaultAzureCredential(),
         "https://cognitiveservices.azure.com/.default",
     )
-    return OpenAI(api_key=token_provider, base_url=base_url)
+    # Call the provider to get the current token string. Reviews complete
+    # in well under the 1-hour Azure token lifetime.
+    return OpenAI(api_key=token_provider(), base_url=base_url)
 
 
 class ModelClient:
