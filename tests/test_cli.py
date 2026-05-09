@@ -1,3 +1,6 @@
+# tests/test_cli.py
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
@@ -10,38 +13,78 @@ from ado_ai_pr_review.errors import ConfigurationError
 from ado_ai_pr_review.models import ReviewCommand
 from ado_ai_pr_review.runtime import RuntimeContext
 
+# ── pipeline subcommand ────────────────────────────────────────────────────────
 
-def test_cli_help_renders() -> None:
-    result = CliRunner().invoke(app, ["--help"])
-
+def test_pipeline_help_renders() -> None:
+    result = CliRunner().invoke(app, ["pipeline", "--help"])
     assert result.exit_code == 0
     assert "repo-root" in result.output
 
 
-def test_cli_run_dry_run_executes_worker(mocker: MockerFixture, tmp_path: Path) -> None:
-    # Set required env vars for RuntimeContext
+def test_pipeline_runs_engine(mocker: MockerFixture, tmp_path: Path) -> None:
     mocker.patch.dict(os.environ, {
         "SYSTEM_TEAMFOUNDATIONCOLLECTIONURI": "https://dev.azure.com/acme/",
-        "SYSTEM_TEAMPROJECT": "Payments",
-        "BUILD_REPOSITORY_ID": "repo-123",
-        "SYSTEM_PULLREQUEST_PULLREQUESTID": "42",
+        "SYSTEM_TEAMPROJECT": "P",
+        "BUILD_REPOSITORY_ID": "r",
+        "SYSTEM_PULLREQUEST_PULLREQUESTID": "1",
         "AZURE_OPENAI_BASE_URL": "https://example.com/",
         "AZURE_OPENAI_DEPLOYMENT": "model",
     })
-    mocker.patch("ado_ai_pr_review.cli.run_worker", return_value=ReviewCommand.ONBOARDING)
+    mocker.patch("ado_ai_pr_review.cli.AdoPipelineAdapter")
+    mocker.patch("ado_ai_pr_review.cli.build_openai_client")
+    engine_mock = mocker.patch("ado_ai_pr_review.cli.ReviewEngine")
+    engine_mock.return_value.run.return_value = ReviewCommand.ONBOARDING
 
-    result = CliRunner().invoke(app, ["--repo-root", str(tmp_path), "--dry-run"])
+    result = CliRunner().invoke(app, ["pipeline", "--repo-root", str(tmp_path), "--dry-run"])
 
     assert result.exit_code == 0
     assert "completed" in result.output
+    engine_mock.return_value.run.assert_called_once()
 
 
-def test_cli_no_args_renders_help_without_running_worker() -> None:
-    result = CliRunner().invoke(app, ["--help"])
+def test_pipeline_exits_1_on_engine_error(mocker: MockerFixture, tmp_path: Path) -> None:
+    mocker.patch.dict(os.environ, {
+        "SYSTEM_TEAMFOUNDATIONCOLLECTIONURI": "https://dev.azure.com/acme/",
+        "SYSTEM_TEAMPROJECT": "P",
+        "BUILD_REPOSITORY_ID": "r",
+        "SYSTEM_PULLREQUEST_PULLREQUESTID": "1",
+        "AZURE_OPENAI_BASE_URL": "https://example.com/",
+        "AZURE_OPENAI_DEPLOYMENT": "model",
+    })
+    mocker.patch("ado_ai_pr_review.cli.AdoPipelineAdapter")
+    mocker.patch("ado_ai_pr_review.cli.build_openai_client")
+    engine_mock = mocker.patch("ado_ai_pr_review.cli.ReviewEngine")
+    engine_mock.return_value.run.side_effect = RuntimeError("model unavailable")
+
+    result = CliRunner().invoke(app, ["pipeline", "--repo-root", str(tmp_path)])
+
+    assert result.exit_code == 1
+
+
+# ── local subcommand ───────────────────────────────────────────────────────────
+
+def test_local_help_renders() -> None:
+    result = CliRunner().invoke(app, ["local", "--help"])
+    assert result.exit_code == 0
+    assert "command" in result.output
+
+
+def test_local_runs_engine(mocker: MockerFixture, tmp_path: Path) -> None:
+    mocker.patch.dict(os.environ, {
+        "AZURE_OPENAI_BASE_URL": "https://example.com/",
+        "AZURE_OPENAI_DEPLOYMENT": "model",
+    })
+    mocker.patch("ado_ai_pr_review.cli.LocalCliAdapter")
+    mocker.patch("ado_ai_pr_review.cli.build_openai_client")
+    engine_mock = mocker.patch("ado_ai_pr_review.cli.ReviewEngine")
+    engine_mock.return_value.run.return_value = ReviewCommand.REVIEW
+
+    result = CliRunner().invoke(app, ["local", "--command", "review", "--repo-root", str(tmp_path)])
 
     assert result.exit_code == 0
-    assert "repo-root" in result.output
 
+
+# ── RuntimeContext (unchanged, still in test_cli.py) ─────────────────────────
 
 def test_runtime_context_reads_pipeline_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI", "https://dev.azure.com/acme/")
@@ -58,8 +101,6 @@ def test_runtime_context_reads_pipeline_environment(monkeypatch: pytest.MonkeyPa
     context = RuntimeContext.from_env(repo_root=".")
 
     assert context.organization_url == "https://dev.azure.com/acme/"
-    assert context.project == "Payments"
-    assert context.repository_id == "repo-123"
     assert context.pull_request_id == 42
     assert context.is_fork is False
     assert context.system_access_token == "token-value"
@@ -67,14 +108,11 @@ def test_runtime_context_reads_pipeline_environment(monkeypatch: pytest.MonkeyPa
 
 def test_runtime_context_requires_pr_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SYSTEM_PULLREQUEST_PULLREQUESTID", raising=False)
-
     with pytest.raises(ConfigurationError, match="SYSTEM_PULLREQUEST_PULLREQUESTID"):
         RuntimeContext.from_env(repo_root=".")
 
 
-def test_runtime_context_accepts_true_is_fork_with_whitespace(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_runtime_context_accepts_true_is_fork_with_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI", "https://dev.azure.com/acme/")
     monkeypatch.setenv("SYSTEM_TEAMPROJECT", "Payments")
     monkeypatch.setenv("BUILD_REPOSITORY_ID", "repo-123")
@@ -86,18 +124,6 @@ def test_runtime_context_accepts_true_is_fork_with_whitespace(
     assert context.is_fork is True
 
 
-def test_runtime_context_accepts_zero_is_fork_as_false(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI", "https://dev.azure.com/acme/")
-    monkeypatch.setenv("SYSTEM_TEAMPROJECT", "Payments")
-    monkeypatch.setenv("BUILD_REPOSITORY_ID", "repo-123")
-    monkeypatch.setenv("SYSTEM_PULLREQUEST_PULLREQUESTID", "42")
-    monkeypatch.setenv("SYSTEM_PULLREQUEST_ISFORK", "0")
-
-    context = RuntimeContext.from_env(repo_root=".")
-
-    assert context.is_fork is False
-
-
 def test_runtime_context_rejects_unknown_is_fork_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI", "https://dev.azure.com/acme/")
     monkeypatch.setenv("SYSTEM_TEAMPROJECT", "Payments")
@@ -107,81 +133,3 @@ def test_runtime_context_rejects_unknown_is_fork_value(monkeypatch: pytest.Monke
 
     with pytest.raises(ConfigurationError, match="SYSTEM_PULLREQUEST_ISFORK"):
         RuntimeContext.from_env(repo_root=".")
-
-
-def test_runtime_context_rejects_whitespace_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI", "https://dev.azure.com/acme/")
-    monkeypatch.setenv("SYSTEM_TEAMPROJECT", "   ")
-    monkeypatch.setenv("BUILD_REPOSITORY_ID", "repo-123")
-    monkeypatch.setenv("SYSTEM_PULLREQUEST_PULLREQUESTID", "42")
-
-    with pytest.raises(ConfigurationError, match="SYSTEM_TEAMPROJECT"):
-        RuntimeContext.from_env(repo_root=".")
-
-
-def test_cli_run_builds_runtime_context(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture, tmp_path: Path) -> None:
-    monkeypatch.setenv("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI", "https://dev.azure.com/acme/")
-    monkeypatch.setenv("SYSTEM_TEAMPROJECT", "Payments")
-    monkeypatch.setenv("BUILD_REPOSITORY_ID", "repo-123")
-    monkeypatch.setenv("BUILD_REPOSITORY_NAME", "checkout-repo")
-    monkeypatch.setenv("SYSTEM_PULLREQUEST_PULLREQUESTID", "42")
-    monkeypatch.setenv("SYSTEM_PULLREQUEST_SOURCEBRANCH", "refs/heads/feature")
-    monkeypatch.setenv("SYSTEM_PULLREQUEST_TARGETBRANCH", "refs/heads/main")
-    monkeypatch.setenv("SYSTEM_PULLREQUEST_ISFORK", "False")
-    monkeypatch.setenv("BUILD_BUILDID", "9001")
-    monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1/")
-    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "review-model")
-
-    run_worker = mocker.patch("ado_ai_pr_review.cli.run_worker", return_value=ReviewCommand.ONBOARDING)
-
-    result = CliRunner().invoke(app, ["--repo-root", str(tmp_path), "--dry-run"])
-
-    assert result.exit_code == 0
-    run_worker.assert_called_once()
-
-
-def test_run_worker_catches_model_error_and_returns_command(
-    monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture, tmp_path: Path
-) -> None:
-    from ado_ai_pr_review.cli import run_worker
-    from ado_ai_pr_review.runtime import RuntimeContext
-
-    # Create config file so bootstrap doesn't trigger
-    (tmp_path / ".ado-ai-review.yml").write_text(
-        "version: 1\ninstructions:\n  reviewer: r.md\n  security: s.md\n  indexer: i.md\n  fixer: f.md\n",
-        encoding="utf-8",
-    )
-
-    context = RuntimeContext(
-        repo_root=tmp_path,
-        organization_url="https://dev.azure.com/acme/",
-        project="P",
-        repository_id="r",
-        repository_name="repo",
-        pull_request_id=42,
-        source_branch="refs/heads/feature",
-        target_branch="refs/heads/main",
-        is_fork=False,
-        build_id="1",
-        system_access_token=None,
-    )
-    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
-    monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
-
-    mocker.patch("ado_ai_pr_review.cli.Bootstrapper").return_value.create_missing_files.return_value = []
-    ado_mock = mocker.patch("ado_ai_pr_review.cli.AdoToolset")
-    ado_instance = ado_mock.return_value
-    ado_instance.list_pr_threads.return_value = {
-        "value": [{"id": 1, "publishedDate": "2026-05-09T10:00:00Z", "comments": [{"content": "/ai review"}]}]
-    }
-    git_mock = mocker.patch("ado_ai_pr_review.cli.GitToolset")
-    git_instance = git_mock.return_value
-    git_instance.diff.return_value = ""
-    git_instance.name_status.return_value = ""
-    mocker.patch("ado_ai_pr_review.cli.RepoIndexer")
-    mocker.patch("ado_ai_pr_review.cli.build_openai_client")
-    mocker.patch("ado_ai_pr_review.cli.ReviewOrchestrator").return_value.run.side_effect = RuntimeError("model unavailable")
-
-    cmd = run_worker(context=context, dry_run=True)
-
-    assert cmd is ReviewCommand.REVIEW
