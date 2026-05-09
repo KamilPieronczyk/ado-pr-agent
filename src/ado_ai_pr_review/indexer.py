@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+import fnmatch
+from pathlib import Path
+
+from ado_ai_pr_review.models import RepoIndexEntry
+
+
+class RepoIndexer:
+    def __init__(self, exclude: list[str]) -> None:
+        self._exclude = exclude
+
+    def build(self, repo_root: Path) -> list[RepoIndexEntry]:
+        entries: list[RepoIndexEntry] = []
+        for path in sorted(repo_root.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(repo_root).as_posix()
+            if self._is_excluded(relative):
+                continue
+            language = self._language(relative)
+            if language == "unknown":
+                continue
+            tags = self._tags(relative)
+            entries.append(
+                RepoIndexEntry(
+                    path=relative,
+                    language=language,
+                    description=f"{language} file at {relative}",
+                    tags=tags,
+                    relevance=50,
+                )
+            )
+        return entries
+
+    def _is_excluded(self, relative: str) -> bool:
+        return any(fnmatch.fnmatch(relative, pattern) for pattern in self._exclude)
+
+    @staticmethod
+    def _language(relative: str) -> str:
+        suffix = Path(relative).suffix.lower()
+        return {
+            ".py": "python",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".tsx": "typescript",
+            ".cs": "csharp",
+            ".go": "go",
+            ".java": "java",
+            ".md": "markdown",
+            ".yml": "yaml",
+            ".yaml": "yaml",
+            ".json": "json",
+        }.get(suffix, "unknown")
+
+    @staticmethod
+    def _tags(relative: str) -> list[str]:
+        lowered = relative.lower()
+        tags: set[str] = set()
+        if lowered.startswith("tests/") or "/test" in lowered or lowered.endswith("_test.py"):
+            tags.add("tests")
+        if any(word in lowered for word in ["auth", "login", "secret", "token", "credential"]):
+            tags.add("security")
+        if any(word in lowered for word in ["controller", "api", "route", "endpoint"]):
+            tags.add("api")
+        if any(word in lowered for word in ["domain", "entity", "aggregate"]):
+            tags.add("domain")
+        if lowered.endswith((".yml", ".yaml", ".json")):
+            tags.add("config")
+        if lowered.endswith(".md"):
+            tags.add("docs")
+        return sorted(tags)
