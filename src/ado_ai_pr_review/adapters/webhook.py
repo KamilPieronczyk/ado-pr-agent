@@ -142,11 +142,12 @@ class AdoWebhookAdapter:
         self._auth_token = auth_token
         self._temp_dir = temp_dir
 
+        self._runner = CliRunner(policy=CommandPolicy.default(), secrets=[auth_token])
+
         # Clone the repo branch into temp_dir
         authenticated_url = self._authenticated_clone_url()
         source_branch = payload.source_ref_name.removeprefix("refs/heads/")
-        bootstrap_runner = CliRunner(policy=CommandPolicy.default(), secrets=[auth_token])
-        bootstrap_runner.run(
+        self._runner.run(
             ["git", "clone", "--depth", "50", "--branch", source_branch, authenticated_url, str(temp_dir)],
             cwd=temp_dir.parent,
         )
@@ -165,14 +166,13 @@ class AdoWebhookAdapter:
             build_id="webhook",
             system_access_token=auth_token,
         )
-        self._runner = CliRunner(policy=CommandPolicy.default(), secrets=[auth_token])
         self._ado = AdoToolset(runner=self._runner, context=self._context)
         self._git = GitToolset(runner=self._runner, repo_root=temp_dir)
         self._publisher = SuggestionPublisher(ado_toolset=self._ado)
 
     def load_request(self) -> ReviewRequest:
         if self._payload.inline_command is not None:
-            command = CommandRouter._detect(self._payload.inline_command)
+            command = CommandRouter.detect_command(self._payload.inline_command)
             if command is None:
                 command = ReviewCommand.ONBOARDING
         else:

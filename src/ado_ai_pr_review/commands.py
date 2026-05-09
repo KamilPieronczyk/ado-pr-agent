@@ -43,3 +43,8 @@ class CommandRouter:
         if "/ai review" in lowered:
             return ReviewCommand.REVIEW
         return None
+
+    @staticmethod
+    def detect_command(text: str) -> ReviewCommand | None:
+        """Public API for detecting a ReviewCommand from a free-text string."""
+        return CommandRouter._detect(text)
