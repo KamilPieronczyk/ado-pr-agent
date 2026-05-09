@@ -12,9 +12,13 @@ from ado_ai_pr_review.errors import ModelOutputError
 from ado_ai_pr_review.models import ReviewResult
 
 
+class ResponseObject(Protocol):
+    output_text: str
+
+
 class ResponsesClient(Protocol):
     class ResponsesApi(Protocol):
-        def create(self, **kwargs: object) -> object: ...
+        def create(self, **kwargs: object) -> ResponseObject: ...
 
     responses: ResponsesApi
 
@@ -50,7 +54,7 @@ class ModelClient:
                 }
             },
         )
-        output_text = str(getattr(response, "output_text"))
+        output_text = str(response.output_text)
         try:
             return ReviewResult.model_validate(json.loads(output_text))
         except (json.JSONDecodeError, ValidationError) as exc:

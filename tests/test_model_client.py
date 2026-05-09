@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
+from pytest_mock import MockerFixture
 
+from ado_ai_pr_review.model_client import ModelClient
 from ado_ai_pr_review.models import Finding, FindingSeverity, FindingType, ReviewResult
 
 
@@ -58,11 +60,6 @@ def test_finding_rejects_descending_line_range() -> None:
 def test_review_result_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         ReviewResult.model_validate({"summary": "No issues.", "unexpected": True})
-
-
-from pytest_mock import MockerFixture
-
-from ado_ai_pr_review.model_client import ModelClient
 
 
 def test_model_client_parses_response_json(mocker: MockerFixture) -> None:
