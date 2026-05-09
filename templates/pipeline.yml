@@ -1,15 +1,33 @@
-trigger: none
+# ADO AI PR Review — reusable extends template.
+#
+# Usage in your repository:
+#
+#   resources:
+#     repositories:
+#       - repository: ado-ai-pr-review
+#         type: github
+#         name: KamilPieronczyk/ado-pr-agent
+#         ref: refs/tags/v1.0.0          # pin to a release tag
+#         endpoint: MyGitHubServiceConnection
+#
+#   extends:
+#     template: templates/pipeline.yml@ado-ai-pr-review
+#     parameters:
+#       imageVersion: v1.0.0             # optional, defaults to latest
 
-pr:
-  branches:
-    include:
-      - "*"
+parameters:
+  - name: imageVersion
+    displayName: Docker image version (tag from ghcr.io/kamilpieronczyk/ado-pr-agent)
+    type: string
+    default: latest
 
-pool:
-  vmImage: ubuntu-latest
+  - name: pool
+    displayName: Agent pool
+    type: object
+    default:
+      vmImage: ubuntu-latest
 
-variables:
-  imageVersion: latest   # override with a release tag, e.g. v1.0.0
+pool: ${{ parameters.pool }}
 
 steps:
   - checkout: self
@@ -17,7 +35,7 @@ steps:
     fetchDepth: 0
 
   - script: |
-      docker pull ghcr.io/kamilpieronczyk/ado-pr-agent:$(imageVersion)
+      docker pull ghcr.io/kamilpieronczyk/ado-pr-agent:${{ parameters.imageVersion }}
     displayName: Pull ADO AI review image
 
   - script: |
@@ -37,7 +55,7 @@ steps:
         -e AZURE_OPENAI_BASE_URL \
         -e AZURE_OPENAI_DEPLOYMENT \
         -e AZURE_OPENAI_API_KEY \
-        ghcr.io/kamilpieronczyk/ado-pr-agent:$(imageVersion) \
+        ghcr.io/kamilpieronczyk/ado-pr-agent:${{ parameters.imageVersion }} \
         run --repo-root /repo
     displayName: Run ADO AI PR review
     env:

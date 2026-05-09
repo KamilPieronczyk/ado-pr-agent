@@ -6,10 +6,11 @@ and mechanical fix suggestions.
 
 ## Quick Start
 
-1. Add `azure-pipelines.ado-ai-review.yml` to your repository (copy from this repo).
-2. Create a branch policy that triggers the pipeline on every PR.
-3. Set the required pipeline variables (see [Environment Variables](#environment-variables)).
-4. Open a PR and comment `/ai review`.
+1. Create a GitHub service connection in your ADO project (Project Settings → Service connections → GitHub).
+2. Add `azure-pipelines.ado-ai-review.yml` to your repository (see [Pipeline Setup](#pipeline-setup)).
+3. Create a branch policy that triggers the pipeline on every PR.
+4. Set the required pipeline variables (see [Environment Variables](#environment-variables)).
+5. Open a PR and comment `/ai review`.
 
 ## Available Commands
 
@@ -26,7 +27,42 @@ and bootstraps missing configuration files into the repository.
 
 ## Pipeline Setup
 
+### Option A — Extends template (recommended)
+
+Add a small pipeline file to your repository that references this repo directly.
+No files to copy or maintain — updates are pulled by changing the tag pin.
+
+```yaml
+# azure-pipelines.ado-ai-review.yml  (in your repository)
+trigger: none
+
+pr:
+  branches:
+    include: ["*"]
+
+resources:
+  repositories:
+    - repository: ado-ai-pr-review
+      type: github
+      name: KamilPieronczyk/ado-pr-agent
+      ref: refs/tags/v1.0.0          # pin to a release tag
+      endpoint: MyGitHubServiceConnection
+
+extends:
+  template: templates/pipeline.yml@ado-ai-pr-review
+  parameters:
+    imageVersion: v1.0.0             # must match the tag above
+```
+
+**Requirements:**
+- A GitHub service connection named `MyGitHubServiceConnection` (or any name — update `endpoint:` accordingly).
+- "Grant access to all pipelines" checked on the service connection.
+
+### Option B — Standalone copy
+
 Copy `azure-pipelines.ado-ai-review.yml` from this repository into your target repo.
+Useful when you cannot create a GitHub service connection or need full local control.
+
 Create an Azure DevOps branch policy that triggers this pipeline on PR creation and update.
 
 ### Required ADO Permissions
