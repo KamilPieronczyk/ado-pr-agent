@@ -108,7 +108,12 @@ class CommandPolicy:
             return _is_safe_ref_or_range(argv[2])
         if len(argv) == 4 and _matches_shape(argv, ("git", "push")):
             return _is_safe_remote(argv[2]) and _is_safe_branch(argv[3])
-        return False
+        return (
+            len(argv) >= 7
+            and _matches_shape(argv, ("git", "clone", "--depth"))
+            and argv[3].isdigit()
+            and argv[4] == "--branch"
+        )
 
     def _is_allowed_az(self, argv: list[str]) -> bool:
         if _matches_exact(
