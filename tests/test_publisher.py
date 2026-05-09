@@ -7,6 +7,8 @@ from pytest_mock import MockerFixture
 
 from ado_ai_pr_review.ado_toolset import AdoToolset
 from ado_ai_pr_review.cli_runner import CommandResult
+from ado_ai_pr_review.models import Finding, FindingSeverity, FindingType, ReviewResult
+from ado_ai_pr_review.publisher import SuggestionPublisher
 from ado_ai_pr_review.runtime import RuntimeContext
 from ado_ai_pr_review.tool_policy import CommandPolicy
 
@@ -154,3 +156,29 @@ def test_ado_toolset_create_thread_removes_temp_body_file(
     argv = _called_argv(runner)
     body_path = Path(argv[argv.index("--in-file") + 1])
     assert not body_path.exists()
+
+
+def test_publisher_creates_inline_suggestion_thread(mocker: MockerFixture, tmp_path: Path) -> None:
+    ado = mocker.Mock()
+    publisher = SuggestionPublisher(ado_toolset=ado)
+    result = ReviewResult(
+        summary="One issue.",
+        findings=[
+            Finding(
+                type=FindingType.BUG_RISK,
+                severity=FindingSeverity.HIGH,
+                title="Guard missing value",
+                body="Handle None before formatting.",
+                file_path="src/app.py",
+                line_start=10,
+                line_end=10,
+                suggested_code="if value is None:\n    return None",
+            )
+        ],
+    )
+
+    publisher.publish_review(result)
+
+    body = ado.create_pr_thread.call_args.kwargs["body"]
+    assert body["threadContext"]["filePath"] == "src/app.py"
+    assert "```suggestion" in body["comments"][0]["content"]
