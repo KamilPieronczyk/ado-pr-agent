@@ -58,3 +58,21 @@ def test_finding_rejects_descending_line_range() -> None:
 def test_review_result_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         ReviewResult.model_validate({"summary": "No issues.", "unexpected": True})
+
+
+from pytest_mock import MockerFixture
+
+from ado_ai_pr_review.model_client import ModelClient
+
+
+def test_model_client_parses_response_json(mocker: MockerFixture) -> None:
+    openai_client = mocker.Mock()
+    openai_client.responses.create.return_value.output_text = """
+{"summary":"ok","findings":[]}
+"""
+    client = ModelClient(openai_client=openai_client, deployment="review-model")
+
+    result = client.review_json(system_prompt="system", user_prompt="user")
+
+    assert result.summary == "ok"
+    openai_client.responses.create.assert_called_once()
