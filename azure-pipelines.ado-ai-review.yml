@@ -25,20 +25,20 @@ steps:
         -v "$(Build.SourcesDirectory):/repo" \
         -w /repo \
         -e SYSTEM_ACCESSTOKEN \
-        -e SYSTEM_TEAMFOUNDATIONCOLLECTIONURI="$(System.TeamFoundationCollectionUri)" \
-        -e SYSTEM_TEAMPROJECT="$(System.TeamProject)" \
-        -e BUILD_REPOSITORY_ID="$(Build.Repository.ID)" \
-        -e BUILD_REPOSITORY_NAME="$(Build.Repository.Name)" \
-        -e SYSTEM_PULLREQUEST_PULLREQUESTID="$(System.PullRequest.PullRequestId)" \
-        -e SYSTEM_PULLREQUEST_SOURCEBRANCH="$(System.PullRequest.SourceBranch)" \
-        -e SYSTEM_PULLREQUEST_TARGETBRANCH="$(System.PullRequest.TargetBranch)" \
-        -e SYSTEM_PULLREQUEST_ISFORK="$(System.PullRequest.IsFork)" \
-        -e BUILD_BUILDID="$(Build.BuildId)" \
+        -e SYSTEM_TEAMFOUNDATIONCOLLECTIONURI \
+        -e SYSTEM_TEAMPROJECT \
+        -e BUILD_REPOSITORY_ID \
+        -e BUILD_REPOSITORY_NAME \
+        -e SYSTEM_PULLREQUEST_PULLREQUESTID \
+        -e SYSTEM_PULLREQUEST_SOURCEBRANCH \
+        -e SYSTEM_PULLREQUEST_TARGETBRANCH \
+        -e SYSTEM_PULLREQUEST_ISFORK \
+        -e BUILD_BUILDID \
         -e AZURE_OPENAI_BASE_URL \
         -e AZURE_OPENAI_DEPLOYMENT \
         -e AZURE_OPENAI_API_KEY \
         ghcr.io/kamilpieronczyk/ado-pr-agent:$(imageVersion) \
-        run --repo-root /repo
+        --repo-root /repo
     displayName: Run ADO AI PR review
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
