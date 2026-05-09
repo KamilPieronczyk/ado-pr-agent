@@ -7,9 +7,15 @@ from ado_ai_pr_review.bootstrap import Bootstrapper
 from ado_ai_pr_review.config import ReviewConfig
 from ado_ai_pr_review.context import ContextSelector
 from ado_ai_pr_review.indexer import RepoIndexer
-from ado_ai_pr_review.models import FindingType, FixCandidate, FixDelivery, ReviewCommand
+from ado_ai_pr_review.models import (
+    FindingType,
+    FixCandidate,
+    FixDelivery,
+    ReviewCommand,
+    SelectedContext,
+)
 from ado_ai_pr_review.observability import ReviewMetrics
-from ado_ai_pr_review.ports import LLMPort, PlatformAdapter
+from ado_ai_pr_review.ports import LLMPort, PlatformAdapter, ReviewRequest
 from ado_ai_pr_review.reviewer import ReviewOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -89,7 +95,7 @@ class ReviewEngine:
         logger.info("review metrics: %s", metrics.to_payload())
         return request.command
 
-    def _run_fix(self, request, config, selected, local_security_summary) -> ReviewCommand:  # type: ignore[no-untyped-def]
+    def _run_fix(self, request: ReviewRequest, config: ReviewConfig, selected: SelectedContext, local_security_summary: str) -> ReviewCommand:
         try:
             result = ReviewOrchestrator(self._model).run(
                 command=request.command,
@@ -133,7 +139,7 @@ class ReviewEngine:
                 fix_pr_created=fix_pr_created,
             )
             logger.info("review metrics: %s", metrics.to_payload())
-            return ReviewCommand(request.command)
+            return request.command
 
         except Exception as exc:
             logger.error("fix failed: %s", exc)
