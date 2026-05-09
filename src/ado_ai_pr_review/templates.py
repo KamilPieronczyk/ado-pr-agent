@@ -2,14 +2,22 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-_DATA = files("ado_ai_pr_review") / "data"
+# Anchor to the data package. subdirectories (instructions/, guidelines/) have __init__.py
+# so they are valid package anchors too. Using the package name is more explicit than
+# files("ado_ai_pr_review") / "data" and works in all deployment modes.
+_DATA = files("ado_ai_pr_review.data")
 
 
 def _read(rel: str) -> str:
+    # Traverse one segment at a time to stay compatible with Traversable API,
+    # which is required for zip-based installs. str.split("/") handles any depth.
     parts = rel.split("/")
     node = _DATA
     for part in parts:
         node = node / part
+    # type: ignore[union-attr] because mypy stubs for importlib.resources type
+    # Traversable.__truediv__ as returning Optional[Traversable], but the runtime
+    # value is always Traversable. read_text() is defined on Traversable.
     return node.read_text(encoding="utf-8")  # type: ignore[union-attr]
 
 

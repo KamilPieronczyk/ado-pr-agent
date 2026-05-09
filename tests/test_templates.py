@@ -1,3 +1,5 @@
+import yaml
+
 from ado_ai_pr_review.templates import BOOTSTRAP_FILES
 
 
@@ -23,7 +25,6 @@ def test_bootstrap_files_all_non_empty() -> None:
 
 
 def test_bootstrap_config_is_valid_yaml() -> None:
-    import yaml
     data = yaml.safe_load(BOOTSTRAP_FILES[".ado-ai-review.yml"])
     assert data["version"] == 1
     assert "instructions" in data
@@ -33,4 +34,4 @@ def test_bootstrap_config_is_valid_yaml() -> None:
 def test_bootstrap_instruction_files_have_headings() -> None:
     instruction_keys = [k for k in BOOTSTRAP_FILES if "/instructions/" in k]
     for key in instruction_keys:
-        assert BOOTSTRAP_FILES[key].startswith("#"), f"{key!r}: should start with a Markdown heading"
+        assert BOOTSTRAP_FILES[key].startswith("# "), f"{key!r}: should start with a Markdown H1 heading"
