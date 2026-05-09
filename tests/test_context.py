@@ -27,3 +27,28 @@ def test_context_selector_loads_guidance_and_relevant_files(tmp_path: Path) -> N
 
     assert selected.always_on_guidance == ["Review carefully.\n"]
     assert selected.dynamic_files == ["src/app.py\nprint('hello')\n"]
+
+
+def test_context_selector_truncates_large_files(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    large_file = tmp_path / "src" / "big.py"
+    large_file.write_text("x" * 20_000, encoding="utf-8")
+
+    selected = ContextSelector(max_files=1, max_chars_per_file=100).select(
+        repo_root=tmp_path,
+        guidance_paths=[],
+        entries=[
+            RepoIndexEntry(
+                path="src/big.py",
+                language="python",
+                description="Big file.",
+                tags=[],
+                relevance=90,
+            )
+        ],
+    )
+
+    assert len(selected.dynamic_files) == 1
+    content = selected.dynamic_files[0]
+    assert "truncated" in content
+    assert len(content) < 300  # well under 20k
