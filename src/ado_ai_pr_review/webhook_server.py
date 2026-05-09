@@ -14,6 +14,8 @@ from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
 
 logger = logging.getLogger(__name__)
 
+_background_tasks: set[asyncio.Task[None]] = set()
+
 app = FastAPI(title="ADO AI PR Review Webhook")
 
 
@@ -27,7 +29,9 @@ async def handle_ado_webhook(payload: AdoWebhookPayload) -> dict[str, str]:
     auth_token = os.getenv("ADO_AUTH_TOKEN")
     if not auth_token:
         raise HTTPException(status_code=401, detail="ADO_AUTH_TOKEN not configured")
-    _task = asyncio.create_task(asyncio.to_thread(_process_sync, payload, auth_token))  # noqa: RUF006
+    task = asyncio.create_task(asyncio.to_thread(_process_sync, payload, auth_token))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return {"status": "accepted"}
 
 
