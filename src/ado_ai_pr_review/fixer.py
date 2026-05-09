@@ -21,9 +21,10 @@ MECHANICAL_WORDS = {
 
 
 class MechanicalFixer:
-    def __init__(self, git_toolset: GitToolset | None, ado_toolset: AdoToolset | None) -> None:
+    def __init__(self, git_toolset: GitToolset | None, ado_toolset: AdoToolset | None, repo_root: Path | None = None) -> None:
         self._git = git_toolset
         self._ado = ado_toolset
+        self._repo_root = repo_root
 
     def is_allowed(self, candidate: FixCandidate) -> bool:
         text = f"{candidate.title} {candidate.explanation} {candidate.commit_message or ''}".lower()
@@ -46,9 +47,12 @@ class MechanicalFixer:
                 continue
             if not candidate.file_path or candidate.replacement is None or not candidate.commit_message:
                 continue
-            Path(candidate.file_path).write_text(candidate.replacement, encoding="utf-8")
+            write_path = (self._repo_root / candidate.file_path) if self._repo_root else Path(candidate.file_path)
+            write_path.write_text(candidate.replacement, encoding="utf-8")
             self._git.add([candidate.file_path])
             commit_shas.append(self._git.commit(candidate.commit_message))
+        if not commit_shas:
+            raise RuntimeError("No mechanical candidates produced commits; fix branch aborted")
         self._git.push("origin", branch_name)
         description = "Mechanical AI fix branch.\n\nCherry-pick commits:\n" + "\n".join(
             f"- `git cherry-pick {sha}`" for sha in commit_shas
