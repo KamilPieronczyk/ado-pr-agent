@@ -138,3 +138,50 @@ def test_cli_run_builds_runtime_context(monkeypatch: pytest.MonkeyPatch, mocker:
 
     assert result.exit_code == 0
     run_worker.assert_called_once()
+
+
+def test_run_worker_catches_model_error_and_returns_command(
+    monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture, tmp_path: Path
+) -> None:
+    from ado_ai_pr_review.cli import run_worker
+    from ado_ai_pr_review.runtime import RuntimeContext
+
+    # Create config file so bootstrap doesn't trigger
+    (tmp_path / ".ado-ai-review.yml").write_text(
+        "version: 1\ninstructions:\n  reviewer: r.md\n  security: s.md\n  indexer: i.md\n  fixer: f.md\n",
+        encoding="utf-8",
+    )
+
+    context = RuntimeContext(
+        repo_root=tmp_path,
+        organization_url="https://dev.azure.com/acme/",
+        project="P",
+        repository_id="r",
+        repository_name="repo",
+        pull_request_id=42,
+        source_branch="refs/heads/feature",
+        target_branch="refs/heads/main",
+        is_fork=False,
+        build_id="1",
+        system_access_token=None,
+    )
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
+    monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
+
+    mocker.patch("ado_ai_pr_review.cli.Bootstrapper").return_value.create_missing_files.return_value = []
+    ado_mock = mocker.patch("ado_ai_pr_review.cli.AdoToolset")
+    ado_instance = ado_mock.return_value
+    ado_instance.list_pr_threads.return_value = {
+        "value": [{"id": 1, "publishedDate": "2026-05-09T10:00:00Z", "comments": [{"content": "/ai review"}]}]
+    }
+    git_mock = mocker.patch("ado_ai_pr_review.cli.GitToolset")
+    git_instance = git_mock.return_value
+    git_instance.diff.return_value = ""
+    git_instance.name_status.return_value = ""
+    mocker.patch("ado_ai_pr_review.cli.RepoIndexer")
+    mocker.patch("ado_ai_pr_review.cli.build_openai_client")
+    mocker.patch("ado_ai_pr_review.cli.ReviewOrchestrator").return_value.run.side_effect = RuntimeError("model unavailable")
+
+    cmd = run_worker(context=context, dry_run=True)
+
+    assert cmd is ReviewCommand.REVIEW
