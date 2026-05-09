@@ -36,6 +36,7 @@ class AdoPipelineAdapter:
     def load_request(self) -> ReviewRequest:
         threads = cast(dict[str, Any], self._ado.list_pr_threads())
         decision = CommandRouter().route(threads)
+        pr_context = self._make_pr_context()
 
         if decision.command is ReviewCommand.ONBOARDING:
             return ReviewRequest(
@@ -43,7 +44,7 @@ class AdoPipelineAdapter:
                 diff_text="",
                 local_findings=(),
                 command=ReviewCommand.ONBOARDING,
-                pr_context=self._make_pr_context(),
+                pr_context=pr_context,
             )
 
         self._git.fetch()
@@ -57,7 +58,7 @@ class AdoPipelineAdapter:
             diff_text=redacted_diff,
             local_findings=tuple(local_findings),
             command=decision.command,
-            pr_context=self._make_pr_context(),
+            pr_context=pr_context,
         )
 
     def publish_onboarding(self) -> None:
@@ -73,6 +74,7 @@ class AdoPipelineAdapter:
     def publish_error(self, exc: BaseException) -> None:
         if self._dry_run:
             return
+        logger.error("review failed: %s", exc, exc_info=True)
         with contextlib.suppress(Exception):
             self._ado.create_pr_thread(body={
                 "comments": [{
