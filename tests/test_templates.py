@@ -2,7 +2,6 @@ import yaml
 
 from ado_ai_pr_review.templates import BOOTSTRAP_FILES
 
-
 EXPECTED_KEYS = {
     ".ado-ai-review.yml",
     ".ado-ai-review/instructions/reviewer.md",
