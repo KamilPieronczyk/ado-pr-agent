@@ -104,3 +104,30 @@ def test_local_adapter_create_fix_branch_commits_and_returns_false(tmp_path: Pat
     git.add.assert_called_once_with(["file.py"])
     git.commit.assert_called_once_with("fix: remove unused import")
     assert candidate_file.read_text() == "fixed"
+
+
+def test_local_adapter_create_fix_branch_returns_false_when_no_allowed_candidates(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from ado_ai_pr_review.adapters.local import LocalCliAdapter
+    from ado_ai_pr_review.git_toolset import GitToolset
+    from ado_ai_pr_review.models import FixCandidate, FixDelivery
+
+    git = MagicMock(spec=GitToolset)
+    adapter = LocalCliAdapter(repo_root=tmp_path, command=ReviewCommand.FIX, _git=git)
+
+    # Title and explanation contain no MECHANICAL_WORDS so is_allowed() returns False
+    candidates = [
+        FixCandidate(
+            delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
+            title="No replacement",
+            explanation="missing code",
+            file_path=None,
+            replacement=None,
+            commit_message=None,
+        )
+    ]
+    result = adapter.create_fix_branch(candidates, "ai-fix/branch", "main")
+
+    assert result is False
+    git.checkout_new_branch.assert_not_called()
+    out = capsys.readouterr().out
+    assert "No mechanical fix candidates" in out

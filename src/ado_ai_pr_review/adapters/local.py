@@ -76,7 +76,7 @@ class LocalCliAdapter:
         self,
         candidates: list[FixCandidate],
         branch_name: str,
-        target_branch: str,
+        target_branch: str,  # not used in local mode — no remote push
     ) -> bool:
         fixer = MechanicalFixer(git_toolset=None, ado_toolset=None, repo_root=self._repo_root)
         allowed = [
