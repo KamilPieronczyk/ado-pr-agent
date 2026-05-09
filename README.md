@@ -7,10 +7,14 @@ and mechanical fix suggestions.
 ## Quick Start
 
 1. Create a GitHub service connection in your ADO project (Project Settings → Service connections → GitHub).
-2. Add `azure-pipelines.ado-ai-review.yml` to your repository (see [Pipeline Setup](#pipeline-setup)).
+2. Add a pipeline file to your repository (see [Pipeline Setup](#pipeline-setup)).
 3. Create a branch policy that triggers the pipeline on every PR.
 4. Set the required pipeline variables (see [Environment Variables](#environment-variables)).
 5. Open a PR and comment `/ai review`.
+
+> **Note:** The Docker image is published to the GitHub Container Registry (GHCR) as a public
+> package. If the package shows as private, set it to public at
+> GitHub → your profile → Packages → `ado-pr-agent` → Package settings → Change visibility.
 
 ## Available Commands
 
@@ -45,23 +49,29 @@ resources:
     - repository: ado-ai-pr-review
       type: github
       name: KamilPieronczyk/ado-pr-agent
-      ref: refs/tags/v1.0.0          # pin to a release tag
+      ref: refs/tags/v1.0.1          # pin to a release tag — check releases for latest
       endpoint: MyGitHubServiceConnection
 
 extends:
   template: templates/pipeline.yml@ado-ai-pr-review
   parameters:
-    imageVersion: v1.0.0             # must match the tag above
+    imageVersion: v1.0.1             # must match the tag above
 ```
 
 **Requirements:**
 - A GitHub service connection named `MyGitHubServiceConnection` (or any name — update `endpoint:` accordingly).
 - "Grant access to all pipelines" checked on the service connection.
 
+The `checkout`, `persistCredentials`, `fetchDepth`, and `SYSTEM_ACCESSTOKEN` mapping are
+already included in `templates/pipeline.yml` — no extra step configuration needed.
+
 ### Option B — Standalone copy
 
 Copy `azure-pipelines.ado-ai-review.yml` from this repository into your target repo.
 Useful when you cannot create a GitHub service connection or need full local control.
+
+The standalone pipeline pulls a pre-built image from GHCR. Override the `imageVersion`
+pipeline variable to pin to a specific release (default: `latest`).
 
 Create an Azure DevOps branch policy that triggers this pipeline on PR creation and update.
 
@@ -75,18 +85,9 @@ Grant these permissions to the **project build service** identity:
 | Pull Request contribute | Post PR comments and threads. |
 | Contribute (branch) | Create bootstrap commits and fix branches. Required only for `/ai fix` and bootstrap. |
 
-The pipeline YAML must include:
-
-```yaml
-steps:
-  - checkout: self
-    persistCredentials: true   # required for git push
-    fetchDepth: 0              # required for full diff
-
-  - script: ...
-    env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)   # must be explicitly mapped
-```
+> **Option B only:** the pipeline YAML must map `SYSTEM_ACCESSTOKEN` and the OpenAI
+> variables explicitly in the `env:` block of the `docker run` step. Option A handles
+> this inside `templates/pipeline.yml`.
 
 ## Environment Variables
 
