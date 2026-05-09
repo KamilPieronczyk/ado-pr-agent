@@ -102,6 +102,8 @@ class CommandPolicy:
             return bool(argv[3])
         if _matches_exact(argv, ("git", "rev-parse", "HEAD")):
             return True
+        if _matches_exact(argv, ("git", "rev-parse", "--abbrev-ref", "HEAD")):
+            return True
         if len(argv) == 3 and _matches_shape(argv, ("git", "show")):
             return _is_safe_ref_or_range(argv[2])
         if len(argv) == 4 and _matches_shape(argv, ("git", "push")):
