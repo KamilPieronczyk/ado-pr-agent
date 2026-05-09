@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ado_ai_pr_review.model_client import ModelClient
 from ado_ai_pr_review.models import ReviewCommand, ReviewResult
+from ado_ai_pr_review.ports import LLMPort
 
 GENERAL_SYSTEM_PROMPT = """You are an Azure DevOps pull request reviewer.
 Return only JSON matching the supplied schema.
@@ -18,7 +18,7 @@ Do not include secret values.
 
 
 class ReviewOrchestrator:
-    def __init__(self, model_client: ModelClient) -> None:
+    def __init__(self, model_client: LLMPort) -> None:
         self._model_client = model_client
 
     def run(
