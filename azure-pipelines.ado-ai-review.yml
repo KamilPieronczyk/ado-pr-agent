@@ -1,0 +1,43 @@
+trigger: none
+
+pr:
+  branches:
+    include:
+      - "*"
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  imageName: ado-ai-pr-review:local
+
+steps:
+  - checkout: self
+    persistCredentials: true
+    fetchDepth: 0
+
+  - script: |
+      docker build -t $(imageName) .
+    displayName: Build ADO AI review worker image
+
+  - script: |
+      docker run --rm \
+        -v "$(Build.SourcesDirectory):/repo" \
+        -w /repo \
+        -e SYSTEM_ACCESSTOKEN="$(System.AccessToken)" \
+        -e SYSTEM_TEAMFOUNDATIONCOLLECTIONURI="$(System.TeamFoundationCollectionUri)" \
+        -e SYSTEM_TEAMPROJECT="$(System.TeamProject)" \
+        -e BUILD_REPOSITORY_ID="$(Build.Repository.ID)" \
+        -e BUILD_REPOSITORY_NAME="$(Build.Repository.Name)" \
+        -e SYSTEM_PULLREQUEST_PULLREQUESTID="$(System.PullRequest.PullRequestId)" \
+        -e SYSTEM_PULLREQUEST_SOURCEBRANCH="$(System.PullRequest.SourceBranch)" \
+        -e SYSTEM_PULLREQUEST_TARGETBRANCH="$(System.PullRequest.TargetBranch)" \
+        -e SYSTEM_PULLREQUEST_ISFORK="$(System.PullRequest.IsFork)" \
+        -e BUILD_BUILDID="$(Build.BuildId)" \
+        -e AZURE_OPENAI_BASE_URL="$(AZURE_OPENAI_BASE_URL)" \
+        -e AZURE_OPENAI_DEPLOYMENT="$(AZURE_OPENAI_DEPLOYMENT)" \
+        -e AZURE_OPENAI_API_KEY="$(AZURE_OPENAI_API_KEY)" \
+        $(imageName) run --repo-root /repo
+    displayName: Run ADO AI PR review
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
