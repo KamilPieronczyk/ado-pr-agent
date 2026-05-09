@@ -13,6 +13,7 @@ from ado_ai_pr_review.engine import ReviewEngine
 from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
 from ado_ai_pr_review.logging_config import configure_logging
 from ado_ai_pr_review.models import ReviewCommand
+from ado_ai_pr_review.ports import LLMPort
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ def pipeline(
     configure_logging(verbose=verbose)
     root = Path(repo_root).resolve()
     adapter = AdoPipelineAdapter(repo_root=root, dry_run=dry_run)
+    # Pipeline mode always uses Azure OpenAI — no copilot support.
     model = ModelClient(
         openai_client=build_openai_client(),  # type: ignore[arg-type]
         deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
@@ -77,13 +79,16 @@ def serve(
     uvicorn.run(_ws.app, host=host, port=port)
 
 
-def _build_model(llm: str) -> ModelClient:
+def _build_model(llm: str) -> LLMPort:
     if llm == "copilot":
-        import ado_ai_pr_review.llm.github_copilot as _copilot  # type: ignore[import-untyped]
-        from ado_ai_pr_review.cli_runner import CliRunner
-        from ado_ai_pr_review.tool_policy import CommandPolicy
-        runner = CliRunner(policy=CommandPolicy.default())
-        return _copilot.GitHubCopilotClient(runner=runner)  # type: ignore[no-any-return]
+        try:
+            from ado_ai_pr_review.cli_runner import CliRunner  # noqa: I001
+            from ado_ai_pr_review.llm.github_copilot import GitHubCopilotClient  # type: ignore[import-untyped]
+            from ado_ai_pr_review.tool_policy import CommandPolicy
+            runner = CliRunner(policy=CommandPolicy.default())
+            return GitHubCopilotClient(runner=runner)  # type: ignore[no-any-return]
+        except ImportError as exc:
+            raise typer.BadParameter("--llm copilot requires llm/github_copilot.py (Task 9)") from exc
     return ModelClient(
         openai_client=build_openai_client(),  # type: ignore[arg-type]
         deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
