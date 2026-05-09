@@ -1,0 +1,77 @@
+version: 1
+
+commands:
+  review:
+    enabled: true
+  security:
+    enabled: true
+  fix:
+    enabled: true
+
+instructions:
+  reviewer: .ado-ai-review/instructions/reviewer.md
+  security: .ado-ai-review/instructions/security.md
+  indexer: .ado-ai-review/instructions/indexer.md
+  fixer: .ado-ai-review/instructions/fixer.md
+
+guidelines:
+  code_style:
+    - .ado-ai-review/guidelines/code-style.md
+    - AGENTS.md
+    - CLAUDE.md
+    - .github/copilot-instructions.md
+  security:
+    - .ado-ai-review/guidelines/security.md
+
+review:
+  focus:
+    - bug-risk
+    - test-gaps
+    - readability
+    - maintainability
+  max_findings: 20
+  severity_threshold: medium
+
+security:
+  enabled: true
+  rules:
+    - secrets
+    - injection
+    - authz
+    - authn
+    - input-validation
+    - unsafe-deserialization
+
+fix:
+  enabled: true
+  mode: mechanical-only
+  inline_suggestions:
+    enabled: true
+    max_lines: 20
+  branch:
+    enabled: true
+    name_template: ai-fix/pr-{pr_id}/{run_id}
+    one_commit_per_change: true
+
+context:
+  index:
+    enabled: true
+    exclude:
+      - node_modules/**
+      - bin/**
+      - obj/**
+      - dist/**
+      - build/**
+      - .git/**
+  dynamic_context:
+    enabled: true
+    max_files: 20
+
+observability:
+  langfuse:
+    enabled: true
+    trace_pr_reviews: true
+    capture_token_usage: true
+    capture_costs: true
+    capture_prompts: false
+    capture_code_context: false
