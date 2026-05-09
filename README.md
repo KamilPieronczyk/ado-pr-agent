@@ -1,3 +1,222 @@
 # ADO AI PR Review
 
-Azure DevOps CLI-first AI pull request reviewer.
+Azure DevOps AI pull request reviewer. Runs as a Docker container in Azure DevOps Pipelines,
+reacts to `/ai` commands in PR comments, and posts code review findings, security findings,
+and mechanical fix suggestions.
+
+## Quick Start
+
+1. Add `azure-pipelines.ado-ai-review.yml` to your repository (copy from this repo).
+2. Create a branch policy that triggers the pipeline on every PR.
+3. Set the required pipeline variables (see [Environment Variables](#environment-variables)).
+4. Open a PR and comment `/ai review`.
+
+## Available Commands
+
+Comment one of these in any PR discussion thread:
+
+| Command | Description |
+|---------|-------------|
+| `/ai review` | General code review: correctness, test gaps, readability, maintainability. |
+| `/ai security` | Security baseline: secrets, injection, auth, authorization, input validation. |
+| `/ai fix` | Mechanical fixes only: formatting, lint, imports, safe renames. |
+
+On the first run (no command yet), the worker posts an onboarding comment listing the commands
+and bootstraps missing configuration files into the repository.
+
+## Pipeline Setup
+
+Copy `azure-pipelines.ado-ai-review.yml` from this repository into your target repo.
+Create an Azure DevOps branch policy that triggers this pipeline on PR creation and update.
+
+### Required ADO Permissions
+
+Grant these permissions to the **project build service** identity:
+
+| Permission | Reason |
+|-----------|--------|
+| Code read | Read repository files and PR diff. |
+| Pull Request contribute | Post PR comments and threads. |
+| Contribute (branch) | Create bootstrap commits and fix branches. Required only for `/ai fix` and bootstrap. |
+
+The pipeline YAML must include:
+
+```yaml
+steps:
+  - checkout: self
+    persistCredentials: true   # required for git push
+    fetchDepth: 0              # required for full diff
+
+  - script: ...
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)   # must be explicitly mapped
+```
+
+## Environment Variables
+
+### Set in Pipeline Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AZURE_OPENAI_BASE_URL` | Yes | Azure OpenAI or AI Foundry base URL. Must end in `/openai/v1/`. Example: `https://myinstance.openai.azure.com/openai/v1/` |
+| `AZURE_OPENAI_DEPLOYMENT` | Yes | Model deployment name. Example: `gpt-4o` |
+| `AZURE_OPENAI_API_KEY` | No | API key. Omit to use Microsoft Entra / managed identity authentication instead. |
+
+### Injected Automatically by Azure DevOps Pipelines
+
+These are standard ADO variables. The pipeline YAML maps them to the container via `-e`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SYSTEM_ACCESSTOKEN` | Yes | ADO access token. Must be explicitly passed via `env:` in the step. |
+| `SYSTEM_TEAMFOUNDATIONCOLLECTIONURI` | Yes | ADO organization URL. Example: `https://dev.azure.com/myorg/` |
+| `SYSTEM_TEAMPROJECT` | Yes | ADO project name. |
+| `BUILD_REPOSITORY_ID` | Yes | Repository GUID. |
+| `SYSTEM_PULLREQUEST_PULLREQUESTID` | Yes | PR ID integer. Only set when the pipeline runs as a branch policy. |
+| `BUILD_REPOSITORY_NAME` | No | Repository name. Defaults to empty string. |
+| `SYSTEM_PULLREQUEST_SOURCEBRANCH` | No | Source branch ref. Example: `refs/heads/feature/my-branch` |
+| `SYSTEM_PULLREQUEST_TARGETBRANCH` | No | Target branch ref. Example: `refs/heads/main` |
+| `SYSTEM_PULLREQUEST_ISFORK` | No | `True` when the PR comes from a fork. Fix branches and bootstrap commits are disabled for forks. |
+| `BUILD_BUILDID` | No | Build ID used in fix branch names. Defaults to `local`. |
+
+## Configuration
+
+On first run, the worker creates `.ado-ai-review.yml` and the instruction/guideline files
+in the repository. Edit them to customise review behaviour.
+
+### `.ado-ai-review.yml` Reference
+
+```yaml
+version: 1
+
+commands:
+  review:
+    enabled: true     # enable /ai review
+  security:
+    enabled: true     # enable /ai security
+  fix:
+    enabled: true     # enable /ai fix
+
+instructions:
+  reviewer: .ado-ai-review/instructions/reviewer.md   # agent instructions for code review
+  security: .ado-ai-review/instructions/security.md   # agent instructions for security review
+  indexer:  .ado-ai-review/instructions/indexer.md    # agent instructions for repo indexing
+  fixer:    .ado-ai-review/instructions/fixer.md      # agent instructions for mechanical fixes
+
+guidelines:
+  code_style:
+    - .ado-ai-review/guidelines/code-style.md   # always loaded for every review
+    - AGENTS.md                                  # optional: existing files picked up if present
+    - CLAUDE.md
+    - .github/copilot-instructions.md
+  security:
+    - .ado-ai-review/guidelines/security.md
+
+review:
+  focus:
+    - bug-risk          # logic errors, incorrect behaviour
+    - test-gaps         # missing or inadequate tests
+    - readability       # confusing names, unclear control flow
+    - maintainability   # coupling, duplication
+  max_findings: 20
+  severity_threshold: medium   # suppress findings below this level (low | medium | high | critical)
+
+security:
+  enabled: true
+  rules:
+    - secrets
+    - injection
+    - authz
+    - authn
+    - input-validation
+    - unsafe-deserialization
+
+fix:
+  enabled: true
+  mode: mechanical-only
+  inline_suggestions:
+    enabled: true
+    max_lines: 20   # inline suggestions longer than this go to a fix branch instead
+  branch:
+    enabled: true
+    name_template: ai-fix/pr-{pr_id}/{run_id}
+    one_commit_per_change: true
+
+context:
+  index:
+    enabled: true
+    exclude:
+      - node_modules/**
+      - bin/**
+      - obj/**
+      - dist/**
+      - build/**
+      - .git/**
+  dynamic_context:
+    enabled: true
+    max_files: 20   # max repository files loaded as context per review
+
+observability:
+  langfuse:
+    enabled: true
+    trace_pr_reviews: true
+    capture_token_usage: true
+    capture_costs: true
+    capture_prompts: false        # set true only for debugging; prompts may contain code
+    capture_code_context: false   # set true only for debugging; context may contain sensitive data
+```
+
+### Instruction Files
+
+The files under `.ado-ai-review/instructions/` guide each agent module:
+
+| File | Purpose |
+|------|---------|
+| `reviewer.md` | Focus areas, severity guidance, and output style for code review. |
+| `security.md` | Security checklist, severity mapping, and constraints for security review. |
+| `indexer.md` | How to tag and describe repository files for context selection. |
+| `fixer.md` | Mechanical fix whitelist and delivery format rules. |
+
+### Guideline Files
+
+The files under `.ado-ai-review/guidelines/` are always-on context loaded for every review:
+
+| File | Purpose |
+|------|---------|
+| `code-style.md` | Project-specific code style and naming conventions. |
+| `security.md` | Team-specific security requirements and sensitive data policies. |
+
+Existing files like `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` are
+loaded automatically if they exist and are listed under `guidelines.code_style`.
+
+## Security Boundary
+
+The model never receives a raw shell tool. Every write action (git push, PR comment) is
+performed by Python code that validates model output first. Secret values detected locally
+are redacted before any model call.
+
+Fix commits are never written directly to the PR source branch. They go to a separate
+`ai-fix/...` branch and a fix PR.
+
+## Local Development
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+pytest
+ruff check src tests
+mypy src
+```
+
+To run against a real PR (read-only, no writes):
+
+```bash
+export SYSTEM_ACCESSTOKEN=...
+export SYSTEM_TEAMFOUNDATIONCOLLECTIONURI=https://dev.azure.com/myorg/
+export SYSTEM_TEAMPROJECT=myproject
+export BUILD_REPOSITORY_ID=...
+export SYSTEM_PULLREQUEST_PULLREQUESTID=123
+export AZURE_OPENAI_BASE_URL=https://...openai.azure.com/openai/v1/
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+ado-ai-pr-review run --repo-root . --dry-run
+```
