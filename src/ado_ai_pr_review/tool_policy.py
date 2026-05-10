@@ -75,12 +75,14 @@ class CommandPolicy:
         if not argv:
             raise CommandRejectedError("Command is empty")
 
-        if argv[0] not in {"git", "az"}:
+        if argv[0] not in {"git", "az", "gh"}:
             raise CommandRejectedError("Binary is not allowlisted")
 
         if argv[0] == "git" and self._is_allowed_git(argv):
             return
         if argv[0] == "az" and self._is_allowed_az(argv):
+            return
+        if argv[0] == "gh" and self._is_allowed_gh(argv):
             return
 
         raise CommandRejectedError("Command shape is not allowlisted")
@@ -114,6 +116,9 @@ class CommandPolicy:
             and argv[3].isdigit()
             and argv[4] == "--branch"
         )
+
+    def _is_allowed_gh(self, argv: list[str]) -> bool:
+        return _matches_exact(argv, ("gh", "auth", "token"))
 
     def _is_allowed_az(self, argv: list[str]) -> bool:
         if _matches_exact(
