@@ -38,7 +38,7 @@ steps:
         -e AZURE_OPENAI_DEPLOYMENT \
         -e AZURE_OPENAI_API_KEY \
         ghcr.io/kamilpieronczyk/ado-pr-agent:$(imageVersion) \
-        --repo-root /repo
+        pipeline --repo-root /repo
     displayName: Run ADO AI PR review
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
