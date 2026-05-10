@@ -13,3 +13,4 @@ RUN python3 -m pip install --root-user-action=ignore .
 EXPOSE 8080
 
 ENTRYPOINT ["ado-ai-pr-review"]
+CMD ["serve"]
