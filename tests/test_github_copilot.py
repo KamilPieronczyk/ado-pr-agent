@@ -25,7 +25,6 @@ def test_github_copilot_client_fetches_token_and_calls_openai(mocker) -> None:  
     from ado_ai_pr_review.llm.github_copilot import GitHubCopilotClient
 
     runner = MagicMock(spec=CliRunner)
-    # Check CommandResult fields by reading cli_runner.py — adjust as needed
     runner.run.return_value = MagicMock(stdout="ghu_test_token_12345\n", returncode=0, stderr="", argv=["gh", "auth", "token"])
 
     openai_mock = mocker.patch("ado_ai_pr_review.llm.github_copilot.OpenAI")

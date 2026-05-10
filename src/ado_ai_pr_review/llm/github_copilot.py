@@ -8,7 +8,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from ado_ai_pr_review.cli_runner import CliRunner
-from ado_ai_pr_review.errors import ModelOutputError
+from ado_ai_pr_review.errors import CommandExecutionError, ModelOutputError
 from ado_ai_pr_review.models import ReviewResult
 
 _BASE_URL = "https://api.githubcopilot.com"
@@ -19,6 +19,10 @@ class GitHubCopilotClient:
     def __init__(self, runner: CliRunner) -> None:
         result = runner.run(["gh", "auth", "token"], cwd=Path("."))
         token = result.stdout.strip()
+        if not token:
+            raise CommandExecutionError(
+                "gh auth token returned empty output — run 'gh auth login' first"
+            )
         self._client = OpenAI(api_key=token, base_url=_BASE_URL)
 
     def review_json(self, system_prompt: str, user_prompt: str) -> ReviewResult:
