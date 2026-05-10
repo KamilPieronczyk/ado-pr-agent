@@ -54,10 +54,17 @@ class ReviewEngine:
         entries = RepoIndexer(exclude=config.context.index.exclude).build(request.repo_root)
         selector = ContextSelector(max_files=config.context.dynamic_context.max_files)
         prefer_tags = {"security"} if request.command is ReviewCommand.SECURITY else set()
+        if request.command is ReviewCommand.SECURITY:
+            primary_instruction = config.instructions.security
+        elif request.command is ReviewCommand.FIX:
+            primary_instruction = config.instructions.fixer
+        else:
+            primary_instruction = config.instructions.reviewer
+
         selected = selector.select(
             repo_root=request.repo_root,
             guidance_paths=[
-                config.instructions.security if request.command is ReviewCommand.SECURITY else config.instructions.reviewer,
+                primary_instruction,
                 *config.guidelines.code_style,
                 *config.guidelines.security,
             ],

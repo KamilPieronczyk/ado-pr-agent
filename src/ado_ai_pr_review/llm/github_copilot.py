@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from openai import OpenAI
@@ -12,7 +13,20 @@ from ado_ai_pr_review.errors import CommandExecutionError, ModelOutputError
 from ado_ai_pr_review.models import ReviewResult
 
 _BASE_URL = "https://api.githubcopilot.com"
-_DEPLOYMENT = "gpt-4o"
+_DEPLOYMENT = "claude-sonnet-4.6"
+# Required by GitHub Copilot API — requests without this header return 403.
+_REQUIRED_HEADERS = {"Copilot-Integration-Id": "vscode-chat"}
+_FENCE_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL)
+_SCHEMA_SUFFIX = (
+    "\n\nYou MUST return raw JSON (no markdown fences) matching this exact schema:\n"
+    + json.dumps(ReviewResult.model_json_schema(), indent=2)
+)
+
+
+def _extract_json(text: str) -> str:
+    """Strip optional markdown code fences; Claude in Copilot may emit them."""
+    m = _FENCE_RE.match(text.strip())
+    return m.group(1) if m else text.strip()
 
 
 class GitHubCopilotClient:
@@ -23,23 +37,25 @@ class GitHubCopilotClient:
             raise CommandExecutionError(
                 "gh auth token returned empty output — run 'gh auth login' first"
             )
-        self._client = OpenAI(api_key=token, base_url=_BASE_URL)
+        self._client = OpenAI(api_key=token, base_url=_BASE_URL, default_headers=_REQUIRED_HEADERS)
 
     def review_json(self, system_prompt: str, user_prompt: str) -> ReviewResult:
-        response = self._client.responses.create(
+        # The Copilot API does not honour response_format for Claude models.
+        # Embed the schema in the system prompt and strip any markdown fences
+        # from the response defensively.
+        # If the caller already embedded a schema (detected by the JSON closing brace
+        # at the end of the prompt), do NOT append the default suffix — it would
+        # override any stricter field requirements (e.g. required suggested_code for FIX).
+        suffix = "" if system_prompt.rstrip().endswith("}") else _SCHEMA_SUFFIX
+        response = self._client.chat.completions.create(
             model=_DEPLOYMENT,
-            instructions=system_prompt,
-            input=user_prompt,
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "review_result",
-                    "schema": ReviewResult.model_json_schema(),
-                    "strict": True,
-                }
-            },
+            messages=[
+                {"role": "system", "content": system_prompt + suffix},
+                {"role": "user", "content": user_prompt},
+            ],
         )
-        output_text = str(response.output_text)
+        raw = response.choices[0].message.content or ""
+        output_text = _extract_json(raw)
         try:
             return ReviewResult.model_validate(json.loads(output_text))
         except (json.JSONDecodeError, ValidationError) as exc:

@@ -28,7 +28,11 @@ def test_github_copilot_client_fetches_token_and_calls_openai(mocker) -> None:  
     runner.run.return_value = MagicMock(stdout="ghu_test_token_12345\n", returncode=0, stderr="", argv=["gh", "auth", "token"])
 
     openai_mock = mocker.patch("ado_ai_pr_review.llm.github_copilot.OpenAI")
-    openai_mock.return_value.responses.create.return_value.output_text = '{"summary":"ok","findings":[]}'
+    mock_message = MagicMock()
+    mock_message.content = '{"summary":"ok","findings":[]}'
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+    openai_mock.return_value.chat.completions.create.return_value.choices = [mock_choice]
 
     client = GitHubCopilotClient(runner=runner)
     result = client.review_json(system_prompt="system", user_prompt="user")
@@ -37,3 +41,4 @@ def test_github_copilot_client_fetches_token_and_calls_openai(mocker) -> None:  
     openai_mock.assert_called_once()
     call_kwargs = openai_mock.call_args
     assert call_kwargs.kwargs["api_key"] == "ghu_test_token_12345"
+    assert call_kwargs.kwargs["default_headers"] == {"Copilot-Integration-Id": "vscode-chat"}
