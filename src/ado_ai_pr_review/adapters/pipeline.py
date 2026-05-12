@@ -110,5 +110,5 @@ class AdoPipelineAdapter:
             source_branch=self._context.source_branch,
             target_branch=self._context.target_branch,
             is_fork=self._context.is_fork,
-            build_id=self._context.build_id,
+            run_id=self._context.build_id,
         )
