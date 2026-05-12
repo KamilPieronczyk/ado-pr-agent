@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 from pytest_mock import MockerFixture
 
-from ado_ai_pr_review.model_client import ModelClient
+from ado_ai_pr_review.llm.azure_openai import ModelClient
 from ado_ai_pr_review.models import Finding, FindingSeverity, FindingType, ReviewResult
 
 
