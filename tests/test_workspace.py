@@ -85,6 +85,24 @@ def test_workspace_rejects_absolute_write_path_outside_root(tmp_path: Path) -> N
         workspace.safe_write_text(str(outside), "secret")
 
 
+def test_workspace_rejects_write_to_dangling_symlink_target(tmp_path: Path) -> None:
+    link = tmp_path / "link.txt"
+    link.symlink_to(tmp_path / "missing.txt")
+    workspace = WorkspaceBoundary(tmp_path)
+
+    with pytest.raises(WorkspaceBoundaryError, match="symlink"):
+        workspace.safe_write_text("link.txt", "secret")
+
+
+def test_workspace_rejects_write_under_dangling_symlink_parent(tmp_path: Path) -> None:
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path / "missing-dir", target_is_directory=True)
+    workspace = WorkspaceBoundary(tmp_path)
+
+    with pytest.raises(WorkspaceBoundaryError, match="symlink"):
+        workspace.safe_write_text("link/file.txt", "secret")
+
+
 def test_workspace_rejects_symlink_to_outside_root(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside-secret.txt"
     outside.write_text("secret", encoding="utf-8")

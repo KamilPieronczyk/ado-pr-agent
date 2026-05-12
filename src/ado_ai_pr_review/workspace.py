@@ -42,7 +42,7 @@ class WorkspaceBoundary:
     def resolve_write_path(self, relative_path: str) -> Path:
         path = self._candidate_path(relative_path)
         self._reject_symlink_ancestors(path, relative_path)
-        if path.exists() and path.is_symlink():
+        if path.is_symlink():
             raise WorkspaceBoundaryError(f"Refusing to write through symlink inside workspace: {relative_path}")
         resolved = path.resolve(strict=False)
         self._require_inside(resolved, relative_path)
@@ -131,7 +131,7 @@ class WorkspaceBoundary:
         for ancestor in ancestors:
             if ancestor == self.root.parent:
                 break
-            if ancestor.exists() and ancestor.is_symlink():
+            if ancestor.is_symlink():
                 raise WorkspaceBoundaryError(
                     f"Refusing to write below symlink parent inside workspace: {requested_path}"
                 )
