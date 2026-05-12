@@ -32,3 +32,5 @@ class AdoRestClient:
             with contextlib.suppress(Exception):
                 error_body = exc.read().decode("utf-8", errors="replace")
             raise AdoApiError(f"{exc.code} {exc.reason} for {url}: {error_body}") from exc
+        except urllib.error.URLError as exc:
+            raise AdoApiError(f"Network error for {url}: {exc.reason}") from exc

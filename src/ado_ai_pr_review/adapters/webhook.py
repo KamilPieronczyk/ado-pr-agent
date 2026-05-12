@@ -188,9 +188,11 @@ class AdoWebhookAdapter:
         payload: AdoWebhookPayload,
         auth_strategy: AdoAuthStrategy,
         temp_dir: Path,
+        request_id: str = "unknown",
     ) -> None:
         self._payload = payload
         self._temp_dir = temp_dir
+        self._request_id = request_id
 
         self._runner = CliRunner(policy=CommandPolicy.default(), secrets=list(auth_strategy.secret_values()))
         rest_client = AdoRestClient(auth=auth_strategy)
@@ -204,8 +206,8 @@ class AdoWebhookAdapter:
                 url = f"{org}/_apis/git/pullRequests/{payload.pull_request_id}?api-version=7.0"
             try:
                 pr_details = cast(dict[str, Any], rest_client.request_json(method="GET", url=url))
-            except Exception:
-                logger.error("Failed to fetch PR details")
+            except Exception as exc:
+                logger.error("Failed to fetch PR details: %s", exc, exc_info=True)
                 pr_details = {}
         else:
             pr_details = {}
@@ -319,4 +321,5 @@ class AdoWebhookAdapter:
             target_branch=self._target_ref,
             is_fork=False,
             run_id="webhook",
+            request_id=self._request_id,
         )

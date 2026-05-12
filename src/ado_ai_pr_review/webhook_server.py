@@ -120,7 +120,7 @@ def _process_sync(payload: AdoWebhookPayload, request_id: str) -> None:
         try:
             auth_strategy = build_ado_auth_strategy()
             adapter = AdoWebhookAdapter(
-                payload=payload, auth_strategy=auth_strategy, temp_dir=temp_dir
+                payload=payload, auth_strategy=auth_strategy, temp_dir=temp_dir, request_id=request_id
             )
             model = _build_model()
             engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
