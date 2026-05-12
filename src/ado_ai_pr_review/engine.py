@@ -134,7 +134,7 @@ class ReviewEngine:
 
             branch_name = config.fix.branch.name_template.format(
                 pr_id=request.pr_context.pr_id or "local",
-                run_id=request.pr_context.build_id,
+                run_id=request.pr_context.run_id,
             )
             target_branch = request.pr_context.target_branch.removeprefix("refs/heads/")
 

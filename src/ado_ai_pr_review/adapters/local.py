@@ -58,7 +58,7 @@ class LocalCliAdapter:
                 source_branch=source_branch,
                 target_branch=self._target_branch,
                 is_fork=False,
-                build_id="local",
+                run_id="local",
                 request_id=self._request_id,
             ),
         )

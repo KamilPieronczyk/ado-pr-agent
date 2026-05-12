@@ -40,7 +40,7 @@ def test_local_adapter_load_request_returns_review_request(tmp_path: Path) -> No
     assert request.pr_context.pr_id is None
     assert request.pr_context.source_branch == "feature-branch"
     assert request.pr_context.target_branch == "main"
-    assert request.pr_context.build_id == "local"
+    assert request.pr_context.run_id == "local"
     assert request.diff_text == ""
     assert request.local_findings == ()
 

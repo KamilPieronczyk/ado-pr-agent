@@ -13,7 +13,7 @@ class PRContext:
     source_branch: str
     target_branch: str
     is_fork: bool
-    build_id: str
+    run_id: str
     request_id: str = "unknown"
 
 

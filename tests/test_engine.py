@@ -21,7 +21,7 @@ def _make_pr_context(pr_id: int | None = 42) -> PRContext:
         source_branch="refs/heads/feature",
         target_branch="refs/heads/main",
         is_fork=False,
-        build_id="1",
+        run_id="1",
     )
 
 

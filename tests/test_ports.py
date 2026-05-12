@@ -10,18 +10,18 @@ from ado_ai_pr_review.ports import PRContext, ReviewRequest
 
 
 def test_pr_context_is_frozen() -> None:
-    ctx = PRContext(pr_id=1, source_branch="feat", target_branch="main", is_fork=False, build_id="42")
+    ctx = PRContext(pr_id=1, source_branch="feat", target_branch="main", is_fork=False, run_id="42")
     with pytest.raises(FrozenInstanceError):
         ctx.pr_id = 2  # type: ignore[misc]
 
 
 def test_pr_context_allows_none_pr_id() -> None:
-    ctx = PRContext(pr_id=None, source_branch="feat", target_branch="main", is_fork=False, build_id="local")
+    ctx = PRContext(pr_id=None, source_branch="feat", target_branch="main", is_fork=False, run_id="local")
     assert ctx.pr_id is None
 
 
 def test_review_request_is_frozen() -> None:
-    ctx = PRContext(pr_id=1, source_branch="feat", target_branch="main", is_fork=False, build_id="42")
+    ctx = PRContext(pr_id=1, source_branch="feat", target_branch="main", is_fork=False, run_id="42")
     req = ReviewRequest(
         repo_root=Path("/tmp"),
         diff_text="some diff",
@@ -41,7 +41,7 @@ def test_review_request_stores_local_findings() -> None:
         title="Secret",
         body="Remove it.",
     )
-    ctx = PRContext(pr_id=1, source_branch="feat", target_branch="main", is_fork=False, build_id="1")
+    ctx = PRContext(pr_id=1, source_branch="feat", target_branch="main", is_fork=False, run_id="1")
     req = ReviewRequest(
         repo_root=Path("/tmp"),
         diff_text="",
@@ -59,8 +59,15 @@ def test_pr_context_carries_request_id() -> None:
         source_branch="refs/heads/feature",
         target_branch="refs/heads/main",
         is_fork=False,
-        build_id="webhook",
+        run_id="webhook",
         request_id="req-42",
     )
 
     assert ctx.request_id == "req-42"
+
+
+def test_pr_context_uses_run_id_not_build_id() -> None:
+    ctx = PRContext(pr_id=1, source_branch="feat", target_branch="main", is_fork=False, run_id="webhook")
+
+    assert ctx.run_id == "webhook"
+    assert not hasattr(ctx, "build_id")
