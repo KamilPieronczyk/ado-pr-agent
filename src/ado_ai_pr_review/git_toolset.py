@@ -52,7 +52,7 @@ class GitToolset:
         remote_url: str,
         branch: str,
         destination: Path,
-        auth_strategy: "AdoAuthStrategy",
+        auth_strategy: AdoAuthStrategy,
         depth: int = 50,
     ) -> CommandResult:
         return self._runner.run(

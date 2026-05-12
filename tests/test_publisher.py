@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from unittest.mock import Mock
-
 from pytest_mock import MockerFixture
 
 from ado_ai_pr_review.models import Finding, FindingSeverity, FindingType, ReviewResult

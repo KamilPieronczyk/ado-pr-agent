@@ -49,7 +49,7 @@ class PatAdoAuthStrategy:
         self._pat = token.strip()
 
     def _encoded_credential(self) -> str:
-        return base64.b64encode(f":{self._pat}".encode("utf-8")).decode("ascii")
+        return base64.b64encode(f":{self._pat}".encode()).decode("ascii")
 
     def authorization_header(self) -> tuple[str, str]:
         return ("Authorization", f"Basic {self._encoded_credential()}")

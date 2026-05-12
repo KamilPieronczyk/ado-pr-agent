@@ -58,7 +58,7 @@ def test_ado_toolset_list_iterations(tmp_path: Path) -> None:
 
     toolset.list_iterations()
 
-    method, url, body = rest.calls[0]
+    method, url, _body = rest.calls[0]
     assert method == "GET"
     assert "iterations" in url
     assert "api-version=7.1" in url
@@ -70,7 +70,7 @@ def test_ado_toolset_list_iteration_changes(tmp_path: Path) -> None:
 
     toolset.list_iteration_changes(iteration_id=3)
 
-    method, url, body = rest.calls[0]
+    method, url, _body = rest.calls[0]
     assert method == "GET"
     assert "/3/changes" in url
     assert "api-version=7.1" in url
@@ -82,7 +82,7 @@ def test_ado_toolset_show_pr(tmp_path: Path) -> None:
 
     toolset.show_pr()
 
-    method, url, body = rest.calls[0]
+    method, url, _body = rest.calls[0]
     assert method == "GET"
     assert "pullRequests/42" in url
     assert "api-version=7.1" in url

@@ -4,7 +4,11 @@ import base64
 
 import pytest
 
-from ado_ai_pr_review.auth.ado import EntraAdoAuthStrategy, PatAdoAuthStrategy, build_ado_auth_strategy
+from ado_ai_pr_review.auth.ado import (
+    EntraAdoAuthStrategy,
+    PatAdoAuthStrategy,
+    build_ado_auth_strategy,
+)
 from ado_ai_pr_review.errors import ConfigurationError
 
 
