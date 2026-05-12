@@ -9,7 +9,6 @@ from typing import Annotated
 import typer
 
 from ado_ai_pr_review.adapters.local import LocalCliAdapter
-from ado_ai_pr_review.adapters.pipeline import AdoPipelineAdapter
 from ado_ai_pr_review.engine import ReviewEngine
 from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
 from ado_ai_pr_review.logging_config import configure_logging
@@ -19,30 +18,6 @@ from ado_ai_pr_review.ports import LLMPort
 logger = logging.getLogger(__name__)
 
 app = typer.Typer(no_args_is_help=True)
-
-
-@app.command()
-def pipeline(
-    repo_root: Annotated[str, typer.Option("--repo-root")] = ".",
-    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
-    verbose: Annotated[bool, typer.Option("--verbose")] = False,
-) -> None:
-    """Run the ADO AI PR review worker in Azure DevOps pipeline mode."""
-    configure_logging(verbose=verbose)
-    root = Path(repo_root).resolve()
-    adapter = AdoPipelineAdapter(repo_root=root, dry_run=dry_run)
-    # Pipeline mode always uses Azure OpenAI — no copilot support.
-    model = ModelClient(
-        openai_client=build_openai_client(),  # type: ignore[arg-type]
-        deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    )
-    engine = ReviewEngine(platform=adapter, model=model, repo_root=root)
-    try:
-        decision = engine.run()
-    except Exception as exc:
-        logger.error("pipeline run failed: %s", exc)
-        raise typer.Exit(code=1) from exc
-    typer.echo(f"ado-ai-pr-review completed command={decision.value}")
 
 
 @app.command()
