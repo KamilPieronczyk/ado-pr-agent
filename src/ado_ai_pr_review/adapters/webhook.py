@@ -14,7 +14,6 @@ from ado_ai_pr_review.ado_toolset import AdoToolset
 from ado_ai_pr_review.auth import AdoAuthStrategy
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.commands import CommandRouter
-from ado_ai_pr_review.fixer import MechanicalFixer
 from ado_ai_pr_review.git_toolset import GitToolset
 from ado_ai_pr_review.models import FixCandidate, ReviewCommand, ReviewResult
 from ado_ai_pr_review.ports import PRContext, ReviewRequest
@@ -302,17 +301,26 @@ class AdoWebhookAdapter:
         branch_name: str,
         target_branch: str,
     ) -> bool:
-        fixer = MechanicalFixer(
-            git_toolset=self._git,
-            ado_toolset=self._ado,
-            repo_root=self._temp_dir,
-        )
+        from ado_ai_pr_review.fixer import MechanicalFixer, MechanicalFixPolicy
+
+        policy = MechanicalFixPolicy()
+        fixer = MechanicalFixer(git=self._git, repo_root=self._temp_dir)
         try:
-            fixer.create_fix_branch(candidates, branch_name, target_branch)
-            return True
+            shas = fixer.apply_commits(candidates, branch_name, policy)
         except RuntimeError as exc:
             logger.warning("fix branch not created: %s", exc)
             return False
+        self._git.push("origin", branch_name)
+        description = "Mechanical AI fix branch.\n\nCherry-pick commits:\n" + "\n".join(
+            f"- `git cherry-pick {sha}`" for sha in shas
+        )
+        self._ado.create_pr(
+            source_branch=branch_name,
+            target_branch=target_branch,
+            title="AI mechanical fixes",
+            description=description,
+        )
+        return True
 
     def _make_pr_context(self) -> PRContext:
         return PRContext(

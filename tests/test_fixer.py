@@ -4,90 +4,79 @@ from typing import cast
 import pytest
 from pytest_mock import MockerFixture
 
-from ado_ai_pr_review.fixer import MechanicalFixer
+from ado_ai_pr_review.fixer import MechanicalFixPolicy, MechanicalFixer
 from ado_ai_pr_review.models import FixCandidate, FixDelivery
 
 
-def test_fixer_rejects_non_mechanical_candidate() -> None:
-    fixer = MechanicalFixer(git_toolset=None, ado_toolset=None)
-    candidate = FixCandidate(
-        delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
-        title="Rewrite pricing logic",
-        explanation="Change discount behavior.",
+def _candidate(
+    title: str = "Format imports",
+    explanation: str = "Import cleanup.",
+    file_path: str = "src/app.py",
+    replacement: str = "import os\n",
+    commit_message: str = "fix: format imports",
+    delivery: FixDelivery = FixDelivery.FIX_BRANCH_CANDIDATE,
+) -> FixCandidate:
+    return FixCandidate(
+        delivery=delivery,
+        title=title,
+        explanation=explanation,
+        file_path=file_path,
+        replacement=replacement,
+        commit_message=commit_message,
     )
 
-    assert fixer.is_allowed(candidate) is False
 
+# --- MechanicalFixPolicy ---
+
+def test_policy_rejects_business_logic_candidate() -> None:
+    policy = MechanicalFixPolicy()
+    assert policy.is_allowed(_candidate(title="Rewrite pricing logic", explanation="Change discount behavior.")) is False
+
+
+def test_policy_allows_mechanical_candidate() -> None:
+    policy = MechanicalFixPolicy()
+    assert policy.is_allowed(_candidate(title="Format imports", explanation="Import cleanup.")) is True
+
+
+# --- MechanicalFixer.apply_commits ---
 
 def test_fixer_creates_one_commit_per_branch_candidate(mocker: MockerFixture, tmp_path: Path) -> None:
     git = mocker.Mock()
-    ado = mocker.Mock()
-    ado.create_pr.return_value = {"pullRequestId": 99, "url": "https://dev.azure.com/acme/pr/99"}
+    git.commit.return_value = "abc1234"
     (tmp_path / "src").mkdir()
-    fixer = MechanicalFixer(git_toolset=git, ado_toolset=ado, repo_root=tmp_path)
-    candidates = [
-        FixCandidate(
-            delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
-            title="Format imports",
-            explanation="Import cleanup.",
-            file_path="src/app.py",
-            replacement="import os\n",
-            commit_message="fix: format imports",
-        )
-    ]
 
-    pr = fixer.create_fix_branch(
-        candidates=candidates,
+    fixer = MechanicalFixer(git=git, repo_root=tmp_path)
+    policy = MechanicalFixPolicy()
+    shas = fixer.apply_commits(
+        candidates=[_candidate()],
         branch_name="ai-fix/pr-42/9001",
-        target_branch="feature",
+        policy=policy,
     )
 
-    pr_dict = cast(dict[str, object], pr)
-    assert pr_dict["pullRequestId"] == 99
+    assert shas == ["abc1234"]
+    git.checkout_new_branch.assert_called_once_with("ai-fix/pr-42/9001")
     git.commit.assert_called_once_with("fix: format imports")
 
 
 def test_fixer_raises_when_no_commits_produced(mocker: MockerFixture, tmp_path: Path) -> None:
     git = mocker.Mock()
-    ado = mocker.Mock()
-    fixer = MechanicalFixer(git_toolset=git, ado_toolset=ado, repo_root=tmp_path)
+    fixer = MechanicalFixer(git=git, repo_root=tmp_path)
+    policy = MechanicalFixPolicy()
     # A candidate that fails is_allowed (business logic)
-    candidates = [
-        FixCandidate(
-            delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
-            title="Rewrite pricing logic",
-            explanation="Change discount behavior.",
-            file_path="src/app.py",
-            replacement="pass\n",
-            commit_message="fix: pricing",
-        )
-    ]
+    candidates = [_candidate(title="Rewrite pricing logic", explanation="Change discount behavior.")]
 
     with pytest.raises(RuntimeError, match="No mechanical candidates"):
-        fixer.create_fix_branch(
-            candidates=candidates,
-            branch_name="ai-fix/pr-42/9001",
-            target_branch="feature",
-        )
+        fixer.apply_commits(candidates, branch_name="ai-fix/pr-42/9001", policy=policy)
 
 
 def test_fixer_rejects_candidate_path_outside_repo(mocker: MockerFixture, tmp_path: Path) -> None:
     git = mocker.Mock()
-    ado = mocker.Mock()
-    fixer = MechanicalFixer(git_toolset=git, ado_toolset=ado, repo_root=tmp_path)
-    candidates = [
-        FixCandidate(
-            delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
-            title="Format imports",
-            explanation="Import cleanup.",
-            file_path="../other-repo/app.py",
-            replacement="import os\n",
-            commit_message="fix: format imports",
-        )
-    ]
+    fixer = MechanicalFixer(git=git, repo_root=tmp_path)
+    policy = MechanicalFixPolicy()
+    candidates = [_candidate(file_path="../other-repo/app.py")]
 
     with pytest.raises(RuntimeError, match="No mechanical candidates"):
-        fixer.create_fix_branch(candidates, branch_name="ai-fix/pr-42/1", target_branch="main")
+        fixer.apply_commits(candidates, branch_name="ai-fix/pr-42/1", policy=policy)
 
     git.add.assert_not_called()
 
@@ -98,20 +87,11 @@ def test_fixer_rejects_symlink_write_target(mocker: MockerFixture, tmp_path: Pat
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").symlink_to(outside)
     git = mocker.Mock()
-    ado = mocker.Mock()
-    fixer = MechanicalFixer(git_toolset=git, ado_toolset=ado, repo_root=tmp_path)
-    candidates = [
-        FixCandidate(
-            delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
-            title="Format imports",
-            explanation="Import cleanup.",
-            file_path="src/app.py",
-            replacement="import os\n",
-            commit_message="fix: format imports",
-        )
-    ]
+    fixer = MechanicalFixer(git=git, repo_root=tmp_path)
+    policy = MechanicalFixPolicy()
+    candidates = [_candidate(file_path="src/app.py")]
 
     with pytest.raises(RuntimeError, match="No mechanical candidates"):
-        fixer.create_fix_branch(candidates, branch_name="ai-fix/pr-42/1", target_branch="main")
+        fixer.apply_commits(candidates, branch_name="ai-fix/pr-42/1", policy=policy)
 
     assert outside.read_text(encoding="utf-8") == "print('outside')\n"
