@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from io import StringIO
 
 from ado_ai_pr_review.log_context import bind_request_context
@@ -53,7 +54,7 @@ def test_configure_logging_redacts_nested_extra_values() -> None:
     logger.info(
         "processed",
         extra={
-            "data": {
+            "errors": {
                 "token": "abc123",
                 "tokens": ["safe", "abc123"],
                 "enabled": True,
@@ -65,7 +66,7 @@ def test_configure_logging_redacts_nested_extra_values() -> None:
 
     payload = json.loads(stream.getvalue())
 
-    assert payload["data"] == {
+    assert payload["errors"] == {
         "token": "[REDACTED]",
         "tokens": ["safe", "[REDACTED]"],
         "enabled": True,
@@ -118,6 +119,23 @@ def test_configure_logging_omits_unapproved_extra_fields() -> None:
     assert "unexpected" not in payload
 
 
+def test_configure_logging_omits_generic_request_and_data_extras() -> None:
+    stream = StringIO()
+    configure_logging(verbose=False, stream=stream, force=True)
+
+    logger = logging.getLogger("ado_ai_pr_review.test")
+    logger.info(
+        "processed",
+        extra={"request": {"id": "req"}, "data": {"token": "abc123"}, "pr_id": 42},
+    )
+
+    payload = json.loads(stream.getvalue())
+
+    assert payload["pr_id"] == 42
+    assert "request" not in payload
+    assert "data" not in payload
+
+
 def test_configure_logging_force_false_keeps_existing_root_handler() -> None:
     root = logging.getLogger()
     existing_stream = StringIO()
@@ -144,12 +162,31 @@ def test_configure_logging_redacts_unsupported_nested_objects() -> None:
     logger = logging.getLogger("ado_ai_pr_review.test")
     logger.info(
         "processed",
-        extra={"data": {"items": [UnsupportedSecret(), {"token": "abc123"}]}},
+        extra={"errors": {"items": [UnsupportedSecret(), {"token": "abc123"}]}},
     )
 
     payload = json.loads(stream.getvalue())
 
-    assert payload["data"] == {
+    assert payload["errors"] == {
         "items": ["unsupported [REDACTED]", {"token": "[REDACTED]"}]
     }
     assert "abc123" not in stream.getvalue()
+
+
+def test_configure_logging_sanitizes_non_finite_float_extras() -> None:
+    stream = StringIO()
+    configure_logging(verbose=False, stream=stream, force=True)
+
+    logger = logging.getLogger("ado_ai_pr_review.test")
+    logger.info(
+        "processed",
+        extra={"errors": [float("nan"), float("inf"), float("-inf"), 1.5]},
+    )
+
+    output = stream.getvalue()
+    payload = json.loads(output)
+
+    assert "NaN" not in output
+    assert "Infinity" not in output
+    assert payload["errors"][:3] == [None, None, None]
+    assert math.isclose(payload["errors"][3], 1.5)

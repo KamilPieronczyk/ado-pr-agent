@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import sys
 import traceback
 from collections.abc import Iterable, Mapping, Sequence
@@ -47,8 +48,6 @@ _ALLOWED_EXTRA_FIELDS = frozenset(
         "error",
         "errors",
         "body_excerpt",
-        "request",
-        "data",
     }
 )
 
@@ -76,7 +75,7 @@ class JsonLogFormatter(logging.Formatter):
                 "".join(traceback.format_exception(*record.exc_info))
             )
 
-        return json.dumps(payload, ensure_ascii=False)
+        return json.dumps(payload, ensure_ascii=False, allow_nan=False)
 
     def _extra_fields(self, record: logging.LogRecord) -> dict[str, object]:
         fields: dict[str, object] = {}
@@ -93,7 +92,9 @@ class JsonLogFormatter(logging.Formatter):
     def _sanitize_value(self, value: object) -> object:
         if isinstance(value, str):
             return self._redactor.redact(value)
-        if value is None or isinstance(value, bool | int | float):
+        if isinstance(value, float):
+            return value if math.isfinite(value) else None
+        if value is None or isinstance(value, bool | int):
             return value
         if isinstance(value, Mapping):
             return {
