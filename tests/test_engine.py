@@ -97,18 +97,6 @@ def test_engine_publishes_onboarding_for_onboarding_command(tmp_path: Path) -> N
     assert platform.onboarding_called
 
 
-def test_engine_publishes_onboarding_when_no_actionable_command(tmp_path: Path) -> None:
-    from ado_ai_pr_review.engine import ReviewEngine
-
-    _write_config(tmp_path)
-    request = _make_request(command=ReviewCommand.ONBOARDING, repo_root=tmp_path)
-    platform = _MockPlatform(request=request)
-    engine = ReviewEngine(platform=platform, model=_MockLLM(), repo_root=tmp_path)
-    cmd = engine.run()
-
-    assert cmd is ReviewCommand.ONBOARDING
-    assert platform.onboarding_called
-
 
 def test_engine_runs_review_and_publishes(tmp_path: Path) -> None:
     from ado_ai_pr_review.engine import ReviewEngine
