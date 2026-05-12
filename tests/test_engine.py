@@ -83,10 +83,13 @@ def _make_review_result(summary: str = "ok") -> ReviewResult:
     return ReviewResult(summary=summary, findings=[])
 
 
-def test_engine_bootstraps_and_publishes_onboarding_when_files_created(tmp_path: Path) -> None:
+def test_engine_publishes_onboarding_for_onboarding_command(tmp_path: Path) -> None:
+    """Engine should call publish_onboarding when load_request returns ONBOARDING command."""
     from ado_ai_pr_review.engine import ReviewEngine
 
-    platform = _MockPlatform()
+    _write_config(tmp_path)
+    request = _make_request(command=ReviewCommand.ONBOARDING, repo_root=tmp_path)
+    platform = _MockPlatform(request=request)
     engine = ReviewEngine(platform=platform, model=_MockLLM(), repo_root=tmp_path)
     cmd = engine.run()
 

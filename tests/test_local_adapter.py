@@ -18,8 +18,12 @@ def test_command_policy_allows_rev_parse_abbrev_ref_head() -> None:
 
 def test_local_adapter_load_request_returns_review_request(tmp_path: Path) -> None:
     from ado_ai_pr_review.adapters.local import LocalCliAdapter
+    from ado_ai_pr_review.bootstrap import Bootstrapper
     from ado_ai_pr_review.cli_runner import CliRunner
     from ado_ai_pr_review.git_toolset import GitToolset
+
+    # Pre-create bootstrap files so load_request() proceeds past the bootstrap check
+    Bootstrapper().create_missing_files(tmp_path)
 
     runner = MagicMock(spec=CliRunner)
     runner.run.return_value = MagicMock(stdout="feature-branch\n", returncode=0, stderr="", argv=[])
@@ -134,10 +138,27 @@ def test_local_adapter_create_fix_branch_returns_false_when_no_allowed_candidate
     assert "No mechanical fix candidates" in out
 
 
+def test_local_adapter_load_request_returns_onboarding_when_files_missing(tmp_path: Path) -> None:
+    from ado_ai_pr_review.adapters.local import LocalCliAdapter
+    from ado_ai_pr_review.models import ReviewCommand
+
+    # tmp_path is empty — bootstrap files don't exist
+    adapter = LocalCliAdapter(repo_root=tmp_path, command=ReviewCommand.REVIEW)
+    request = adapter.load_request()
+
+    assert request.command is ReviewCommand.ONBOARDING
+    # Bootstrap files should have been created
+    assert (tmp_path / ".ado-ai-review.yml").exists()
+
+
 def test_local_adapter_sets_request_id_on_pr_context(tmp_path: Path, mocker: MockerFixture) -> None:
     from ado_ai_pr_review.adapters.local import LocalCliAdapter
+    from ado_ai_pr_review.bootstrap import Bootstrapper
     from ado_ai_pr_review.cli_runner import CliRunner
     from ado_ai_pr_review.git_toolset import GitToolset
+
+    # Pre-create bootstrap files so load_request() proceeds past the bootstrap check
+    Bootstrapper().create_missing_files(tmp_path)
 
     runner = mocker.Mock(spec=CliRunner)
     runner.run.return_value = MagicMock(stdout="feature/local\n", returncode=0, stderr="", argv=[])

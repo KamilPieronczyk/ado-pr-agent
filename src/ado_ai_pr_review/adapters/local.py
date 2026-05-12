@@ -36,6 +36,25 @@ class LocalCliAdapter:
         self._git = _git or GitToolset(runner=self._runner, repo_root=repo_root)
 
     def load_request(self) -> ReviewRequest:
+        from ado_ai_pr_review.bootstrap import Bootstrapper
+
+        created = Bootstrapper().create_missing_files(self._repo_root)
+        if created:
+            return ReviewRequest(
+                repo_root=self._repo_root,
+                diff_text="",
+                local_findings=(),
+                command=ReviewCommand.ONBOARDING,
+                pr_context=PRContext(
+                    pr_id=None,
+                    source_branch="unknown",
+                    target_branch=self._target_branch,
+                    is_fork=False,
+                    run_id="local",
+                    request_id=self._request_id,
+                ),
+            )
+
         source_branch = self._runner.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=self._repo_root,

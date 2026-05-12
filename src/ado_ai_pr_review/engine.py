@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ado_ai_pr_review.bootstrap import Bootstrapper
 from ado_ai_pr_review.config import ReviewConfig
 from ado_ai_pr_review.context import ContextSelector
 from ado_ai_pr_review.indexer import RepoIndexer
@@ -35,11 +34,6 @@ class ReviewEngine:
         self._repo_root = repo_root
 
     def run(self) -> ReviewCommand:
-        created = Bootstrapper().create_missing_files(self._repo_root)
-        if created:
-            self._platform.publish_onboarding()
-            return ReviewCommand.ONBOARDING
-
         config = ReviewConfig.load(self._repo_root)
 
         try:
