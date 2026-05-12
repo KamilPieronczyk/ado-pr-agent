@@ -92,12 +92,12 @@ class WorkspaceBoundary:
             depth += 1
 
     def _reject_absolute_parent_escape(self, path: Path, requested_path: str) -> None:
-        if ".." not in path.parts:
-            return
-
         root_parts = self.root.parts
         if path.parts[: len(root_parts)] != root_parts:
             raise WorkspaceBoundaryError(f"Path escapes outside workspace: {requested_path}")
+
+        if ".." not in path.parts:
+            return
 
         current_parts: list[str] = []
         entered_workspace = False
@@ -145,15 +145,15 @@ class ProcessContext:
 
     @classmethod
     def from_current_env(cls, workspace: WorkspaceBoundary, request_id: str) -> ProcessContext:
-        return cls(workspace=workspace, request_id=request_id, base_env=os.environ)
+        return cls(workspace=workspace, request_id=request_id, base_env=dict(os.environ))
 
     def require_cwd(self, cwd: Path) -> Path:
         return self.workspace.require_cwd(cwd)
 
     def build_env(self, overrides: Mapping[str, str] | None = None) -> dict[str, str]:
         env = dict(self.base_env)
-        env["ADO_AI_REQUEST_ID"] = self.request_id
-        env.setdefault("GIT_TERMINAL_PROMPT", "0")
         if overrides:
             env.update(overrides)
+        env.setdefault("GIT_TERMINAL_PROMPT", "0")
+        env["ADO_AI_REQUEST_ID"] = self.request_id
         return env

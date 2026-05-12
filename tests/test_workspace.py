@@ -77,6 +77,18 @@ def test_workspace_rejects_absolute_path_outside_root(tmp_path: Path) -> None:
         workspace.safe_read_text(str(outside))
 
 
+def test_workspace_rejects_absolute_symlink_path_outside_root_resolving_inside(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "file.txt").write_text("secret", encoding="utf-8")
+    external_link = tmp_path.parent / f"{tmp_path.name}-link"
+    external_link.symlink_to(tmp_path, target_is_directory=True)
+    workspace = WorkspaceBoundary(tmp_path)
+
+    with pytest.raises(WorkspaceBoundaryError, match="outside workspace"):
+        workspace.safe_read_text(str(external_link / "file.txt"))
+
+
 def test_workspace_rejects_absolute_write_path_outside_root(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside.txt"
     workspace = WorkspaceBoundary(tmp_path)
@@ -125,3 +137,25 @@ def test_process_context_builds_env_and_validates_cwd(tmp_path: Path) -> None:
     assert env["ADO_AI_REQUEST_ID"] == "req-1"
     assert env["GIT_TERMINAL_PROMPT"] == "0"
     assert process.require_cwd(tmp_path) == tmp_path.resolve()
+
+
+def test_process_context_request_id_overrides_env_overrides(tmp_path: Path) -> None:
+    workspace = WorkspaceBoundary(tmp_path)
+    process = ProcessContext(workspace=workspace, request_id="req-1", base_env={})
+
+    env = process.build_env({"ADO_AI_REQUEST_ID": "spoof"})
+
+    assert env["ADO_AI_REQUEST_ID"] == "req-1"
+
+
+def test_process_context_from_current_env_snapshots_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADO_AI_WORKSPACE_TEST", "before")
+    workspace = WorkspaceBoundary(tmp_path)
+    process = ProcessContext.from_current_env(workspace=workspace, request_id="req-1")
+
+    monkeypatch.setenv("ADO_AI_WORKSPACE_TEST", "after")
+
+    assert process.build_env()["ADO_AI_WORKSPACE_TEST"] == "before"
