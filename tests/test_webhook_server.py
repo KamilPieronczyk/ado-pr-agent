@@ -203,13 +203,16 @@ def _make_process_sync_mocks(
     engine_mock = MagicMock()
     engine_mock.run.return_value = command
 
-    patch("ado_ai_pr_review.webhook_server.AdoWebhookAdapter", return_value=adapter_mock).start()
-    patch("ado_ai_pr_review.webhook_server.ReviewEngine", return_value=engine_mock).start()
-    patch("ado_ai_pr_review.webhook_server.build_ado_auth_strategy").start()
-    patch("ado_ai_pr_review.webhook_server.build_llm").start()
-    tmp_ctx = patch("ado_ai_pr_review.webhook_server.tempfile.TemporaryDirectory").start()
-    tmp_ctx.return_value.__enter__.return_value = str(tmp_path)
-    tmp_ctx.return_value.__exit__.return_value = False
+    tmp_mock = MagicMock()
+    tmp_mock.return_value.__enter__.return_value = str(tmp_path)
+    tmp_mock.return_value.__exit__.return_value = False
+
+    import ado_ai_pr_review.webhook_server as _ws
+    monkeypatch.setattr(_ws, "AdoWebhookAdapter", MagicMock(return_value=adapter_mock))
+    monkeypatch.setattr(_ws, "ReviewEngine", MagicMock(return_value=engine_mock))
+    monkeypatch.setattr(_ws, "build_ado_auth_strategy", MagicMock())
+    monkeypatch.setattr(_ws, "build_llm", MagicMock())
+    monkeypatch.setattr(_ws.tempfile, "TemporaryDirectory", tmp_mock)
 
     return adapter_mock
 
