@@ -47,7 +47,7 @@ class Finding(BaseModel):
         if self.line_start is None and self.line_end is not None:
             raise ValueError("line_start is required when line_end is set")
         if self.line_start is not None and self.line_end is None:
-            raise ValueError("line_end is required when line_start is set")
+            object.__setattr__(self, "line_end", self.line_start)
         if (
             self.line_start is not None
             and self.line_end is not None
@@ -97,3 +97,39 @@ class FixCandidate(BaseModel):
     file_path: str | None = None
     replacement: str | None = None
     commit_message: str | None = None
+
+
+class InlineSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+    line_start: int = Field(ge=1)
+    line_end: int = Field(ge=1)
+    severity: FindingSeverity
+    title: str = Field(min_length=1, max_length=160)
+    body: str = Field(min_length=1, max_length=4_000)
+    replacement_lines: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_line_range(self) -> Self:
+        if self.line_end < self.line_start:
+            raise ValueError("line_end must be >= line_start")
+        return self
+
+
+class FixBranchChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+    title: str = Field(min_length=1, max_length=160)
+    body: str = Field(min_length=1, max_length=4_000)
+    full_file_content: str = Field(min_length=1)
+    commit_message: str = Field(min_length=1, max_length=256)
+
+
+class FixPlanResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    summary: str = Field(min_length=1, max_length=4_000)
+    inline_suggestions: list[InlineSuggestion] = Field(default_factory=list)
+    fix_branch_changes: list[FixBranchChange] = Field(default_factory=list)
