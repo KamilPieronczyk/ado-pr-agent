@@ -47,7 +47,7 @@ class SuggestionPublisher:
 
         is_inline = bool(finding.file_path and finding.line_start)
         if finding.suggested_code:
-            content = f"{content}\n\n```\n{finding.suggested_code}\n```"
+            content = f"{content}\n\n```suggestion\n{finding.suggested_code}\n```"
         content = f"{content}\n\n{_BOT_MARKER}"
 
         comment_type = "codeChange" if is_inline and finding.suggested_code else "text"
@@ -87,7 +87,7 @@ class SuggestionPublisher:
         content = (
             f"**{suggestion.severity.value.upper()}: {suggestion.title}**\n\n"
             f"{suggestion.body}\n\n"
-            f"```\n{suggestion.replacement_lines}\n```\n\n"
+            f"```suggestion\n{suggestion.replacement_lines}\n```\n\n"
             f"{_BOT_MARKER}"
         )
         self._ado.create_pr_thread(

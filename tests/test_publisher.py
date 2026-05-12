@@ -37,7 +37,7 @@ def test_publisher_creates_inline_suggestion_thread(mocker: MockerFixture) -> No
     body = ado.create_pr_thread.call_args.kwargs["body"]
     assert body["threadContext"]["filePath"] == "/src/app.py"
     comment = body["comments"][0]
-    assert "if value is None" in comment["content"]
+    assert "```suggestion\nif value is None" in comment["content"]
     assert comment["commentType"] == "codeChange"
     assert _BOT_MARKER in comment["content"]
 
@@ -117,7 +117,7 @@ def test_publisher_publish_fix_result_posts_summary_and_inline_suggestion(mocker
     assert suggestion_body["threadContext"]["rightFileEnd"]["line"] == 12
     assert suggestion_body["comments"][0]["commentType"] == "codeChange"
     assert "Fix id" in suggestion_body["comments"][0]["content"]
-    assert "const id = Math.max" in suggestion_body["comments"][0]["content"]
+    assert "```suggestion\n  const id = Math.max" in suggestion_body["comments"][0]["content"]
     assert _BOT_MARKER in suggestion_body["comments"][0]["content"]
 
 

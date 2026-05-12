@@ -10,12 +10,24 @@ Return only JSON matching the supplied schema.
 Prioritize correctness, bug risk, test gaps, readability, and maintainability.
 Do not propose business logic rewrites.
 Do not include secret values.
+
+For each finding set file_path, line_start, and line_end to the affected location.
+Set suggested_code ONLY when you have a specific, ready-to-apply replacement for that exact line range.
+  suggested_code must contain ONLY the replacement lines (no surrounding context, no full file).
+  ADO will replace line_start..line_end with suggested_code when the user clicks Apply.
+Leave suggested_code null for concerns, questions, or observations that do not have a clear replacement.
 """
 
 SECURITY_SYSTEM_PROMPT = """You are a security reviewer for an Azure DevOps pull request.
 Return only JSON matching the supplied schema.
 Focus on secrets, injection, authentication, authorization, input validation, unsafe deserialization, and sensitive data handling.
 Do not include secret values.
+
+For each finding set file_path, line_start, and line_end to the affected location.
+Set suggested_code ONLY when you have a specific, ready-to-apply replacement for that exact line range.
+  suggested_code must contain ONLY the replacement lines (no surrounding context, no full file).
+  ADO will replace line_start..line_end with suggested_code when the user clicks Apply.
+Leave suggested_code null for concerns or questions that do not have a clear replacement.
 """
 
 
