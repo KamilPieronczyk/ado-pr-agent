@@ -18,6 +18,9 @@ class GitToolset:
     def fetch(self, remote: str = "origin") -> CommandResult:
         return self._runner.run(["git", "fetch", remote, "--prune"], cwd=self._repo_root)
 
+    def fetch_branch(self, remote: str, branch: str) -> CommandResult:
+        return self._runner.run(["git", "fetch", remote, branch], cwd=self._repo_root)
+
     def diff(self, ref_range: str, unified: int = 0) -> str:
         result = self._runner.run(
             ["git", "diff", f"--unified={unified}", ref_range],
@@ -32,8 +35,11 @@ class GitToolset:
         )
         return result.stdout
 
-    def checkout_new_branch(self, branch: str) -> CommandResult:
-        return self._runner.run(["git", "checkout", "-B", branch], cwd=self._repo_root)
+    def checkout_new_branch(self, branch: str, start_point: str | None = None) -> CommandResult:
+        cmd = ["git", "checkout", "-B", branch]
+        if start_point is not None:
+            cmd.append(start_point)
+        return self._runner.run(cmd, cwd=self._repo_root)
 
     def add(self, paths: Sequence[str]) -> CommandResult:
         return self._runner.run(["git", "add", *paths], cwd=self._repo_root)

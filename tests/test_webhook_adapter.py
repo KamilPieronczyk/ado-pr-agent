@@ -125,6 +125,7 @@ def test_create_config_pr_creates_branch_commits_and_opens_pr(tmp_path: Path) ->
     ado_mock = MagicMock()
     adapter._git = git_mock
     adapter._ado = ado_mock
+    adapter._source_ref = "refs/heads/feature/my-branch"
     adapter._target_ref = "refs/heads/main"
 
     with patch("ado_ai_pr_review.bootstrap.Bootstrapper") as bootstrap_cls:
@@ -135,7 +136,7 @@ def test_create_config_pr_creates_branch_commits_and_opens_pr(tmp_path: Path) ->
         result = adapter.create_config_pr()
 
     assert result is True
-    git_mock.checkout_new_branch.assert_called_once_with("ai-config/setup")
+    git_mock.checkout_new_branch.assert_called_once_with("ai-config/setup", start_point="feature/my-branch")
     git_mock.add.assert_called_once_with([
         ".ado-ai-review.yml",
         ".ado-ai-review/instructions/reviewer.md",

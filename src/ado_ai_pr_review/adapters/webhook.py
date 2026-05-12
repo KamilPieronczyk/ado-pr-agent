@@ -196,8 +196,9 @@ class AdoWebhookAdapter:
             return False
 
         branch_name = "ai-config/setup"
+        source_branch = self._source_ref.removeprefix("refs/heads/")
         target_branch = self._target_ref.removeprefix("refs/heads/")
-        self._git.checkout_new_branch(branch_name)
+        self._git.checkout_new_branch(branch_name, start_point=source_branch)
         self._git.add(created)
         self._git.commit("chore: add ADO AI review configuration")
         self._git.push("origin", branch_name)
