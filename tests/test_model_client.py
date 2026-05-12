@@ -3,7 +3,15 @@ from pydantic import ValidationError
 from pytest_mock import MockerFixture
 
 from ado_ai_pr_review.llm.azure_openai import ModelClient
-from ado_ai_pr_review.models import Finding, FindingSeverity, FindingType, ReviewResult
+from ado_ai_pr_review.models import (
+    Finding,
+    FindingType,
+    FindingSeverity,
+    ReviewResult,
+    FixBranchChange,
+    FixPlanResult,
+    InlineSuggestion,
+)
 
 
 def test_review_result_validates_finding_payload() -> None:
@@ -86,13 +94,6 @@ def test_model_client_parses_response_json(mocker: MockerFixture) -> None:
 
     assert result.summary == "ok"
     openai_client.responses.create.assert_called_once()
-
-
-from ado_ai_pr_review.models import (
-    FixBranchChange,
-    FixPlanResult,
-    InlineSuggestion,
-)
 
 
 def test_fix_plan_result_validates_inline_suggestion() -> None:
