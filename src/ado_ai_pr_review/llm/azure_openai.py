@@ -9,7 +9,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from ado_ai_pr_review.errors import ModelOutputError
-from ado_ai_pr_review.models import ReviewResult
+from ado_ai_pr_review.models import FixPlanResult, ReviewResult
 
 
 class ResponseObject(Protocol):
@@ -61,3 +61,23 @@ class ModelClient:
             return ReviewResult.model_validate(json.loads(output_text))
         except (json.JSONDecodeError, ValidationError) as exc:
             raise ModelOutputError(f"Model returned invalid review JSON: {exc}") from exc
+
+    def fix_plan_json(self, system_prompt: str, user_prompt: str) -> FixPlanResult:
+        response = self._openai_client.responses.create(
+            model=self._deployment,
+            instructions=system_prompt,
+            input=user_prompt,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "fix_plan_result",
+                    "schema": FixPlanResult.model_json_schema(),
+                    "strict": True,
+                }
+            },
+        )
+        output_text = str(response.output_text)
+        try:
+            return FixPlanResult.model_validate(json.loads(output_text))
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise ModelOutputError(f"Model returned invalid fix plan JSON: {exc}") from exc

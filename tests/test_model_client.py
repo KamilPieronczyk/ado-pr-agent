@@ -153,3 +153,21 @@ def test_inline_suggestion_rejects_descending_line_range() -> None:
 def test_fix_plan_result_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError):
         FixPlanResult.model_validate({"summary": "ok", "unexpected": True})
+
+
+def test_model_client_parses_fix_plan_json(mocker: MockerFixture) -> None:
+    openai_client = mocker.Mock()
+    openai_client.responses.create.return_value.output_text = (
+        '{"summary":"two fixes",'
+        '"inline_suggestions":[{"file_path":"src/app.py","line_start":5,"line_end":5,'
+        '"severity":"high","title":"Fix x","body":"Fix it.","replacement_lines":"const x = 1;"}],'
+        '"fix_branch_changes":[]}'
+    )
+    client = ModelClient(openai_client=openai_client, deployment="review-model")
+
+    result = client.fix_plan_json(system_prompt="system", user_prompt="user")
+
+    assert result.summary == "two fixes"
+    assert len(result.inline_suggestions) == 1
+    assert result.inline_suggestions[0].file_path == "src/app.py"
+    openai_client.responses.create.assert_called_once()
