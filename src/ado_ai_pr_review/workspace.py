@@ -73,8 +73,21 @@ class WorkspaceBoundary:
     def _candidate_path(self, requested_path: str) -> Path:
         path = Path(requested_path)
         if not path.is_absolute():
+            self._reject_relative_parent_escape(path, requested_path)
             path = self.root / path
         return path
+
+    def _reject_relative_parent_escape(self, path: Path, requested_path: str) -> None:
+        depth = 0
+        for part in path.parts:
+            if part in ("", "."):
+                continue
+            if part == "..":
+                depth -= 1
+                if depth < 0:
+                    raise WorkspaceBoundaryError(f"Path escapes outside workspace: {requested_path}")
+                continue
+            depth += 1
 
     def _require_inside(self, path: Path, requested_path: str) -> None:
         if not path.is_relative_to(self.root):

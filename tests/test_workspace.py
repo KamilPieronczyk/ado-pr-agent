@@ -24,6 +24,21 @@ def test_workspace_rejects_parent_traversal(tmp_path: Path) -> None:
         workspace.safe_read_text("../other-repo/secret.py")
 
 
+def test_workspace_rejects_parent_traversal_that_returns_inside_root(tmp_path: Path) -> None:
+    (tmp_path / "file.txt").write_text("secret", encoding="utf-8")
+    workspace = WorkspaceBoundary(tmp_path)
+
+    with pytest.raises(WorkspaceBoundaryError, match="outside workspace"):
+        workspace.safe_read_text(f"../{tmp_path.name}/file.txt")
+
+
+def test_workspace_rejects_write_parent_traversal_that_returns_inside_root(tmp_path: Path) -> None:
+    workspace = WorkspaceBoundary(tmp_path)
+
+    with pytest.raises(WorkspaceBoundaryError, match="outside workspace"):
+        workspace.safe_write_text(f"../{tmp_path.name}/file.txt", "secret")
+
+
 def test_workspace_rejects_absolute_path_outside_root(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside.txt"
     outside.write_text("secret", encoding="utf-8")
