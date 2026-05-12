@@ -35,6 +35,8 @@ class ReviewEngine:
             raise
 
         with bind_request_context(request.pr_context.request_id):
-            handler = HANDLERS[request.command]
+            handler = HANDLERS.get(request.command)
+            if handler is None:
+                raise ValueError(f"No handler registered for command {request.command!r}")
             handler.handle(request, self._platform, self._model, config)
             return request.command

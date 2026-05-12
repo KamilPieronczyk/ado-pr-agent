@@ -112,4 +112,4 @@ class LocalCliAdapter:
         for sha in shas:
             typer.echo(f"  {sha[:8]}")
         typer.echo(f"Fix branch '{branch_name}' created locally (not pushed).")
-        return False
+        return True

@@ -171,12 +171,15 @@ class AdoWebhookAdapter:
         description = "Mechanical AI fix branch.\n\nCherry-pick commits:\n" + "\n".join(
             f"- `git cherry-pick {sha}`" for sha in shas
         )
-        self._ado.create_pr(
-            source_branch=branch_name,
-            target_branch=target_branch,
-            title="AI mechanical fixes",
-            description=description,
-        )
+        try:
+            self._ado.create_pr(
+                source_branch=branch_name,
+                target_branch=target_branch,
+                title="AI mechanical fixes",
+                description=description,
+            )
+        except Exception as exc:
+            logger.warning("fix branch pushed but PR creation failed: %s", exc)
         return True
 
     def _make_pr_context(self) -> PRContext:

@@ -71,7 +71,7 @@ def test_local_adapter_publish_error_writes_to_stderr(tmp_path: Path, capsys: py
     assert "boom" in err
 
 
-def test_local_adapter_create_fix_branch_commits_and_returns_false(tmp_path: Path) -> None:
+def test_local_adapter_create_fix_branch_commits_and_returns_true(tmp_path: Path) -> None:
     from ado_ai_pr_review.adapters.local import LocalCliAdapter
     from ado_ai_pr_review.cli_runner import CliRunner
     from ado_ai_pr_review.git_toolset import GitToolset
@@ -104,7 +104,7 @@ def test_local_adapter_create_fix_branch_commits_and_returns_false(tmp_path: Pat
     ]
     result = adapter.create_fix_branch(candidates, "ai-fix/pr-1/run-1", "main")
 
-    assert result is False
+    assert result is True
     git.checkout_new_branch.assert_called_once_with("ai-fix/pr-1/run-1")
     git.add.assert_called_once_with(["file.py"])
     git.commit.assert_called_once_with("fix: remove unused import")
