@@ -59,3 +59,11 @@ def test_orchestrator_fix_plan_calls_fix_plan_json(mocker: MockerFixture) -> Non
     assert "No secrets." in call_kwargs["user_prompt"]
     assert "inline_suggestions" in call_kwargs["system_prompt"]
     assert "fix_branch_changes" in call_kwargs["system_prompt"]
+
+
+def test_reviewer_has_no_legacy_fix_system_prompt() -> None:
+    import ado_ai_pr_review.reviewer as reviewer_module
+
+    assert not hasattr(reviewer_module, "FIX_SYSTEM_PROMPT"), (
+        "FIX_SYSTEM_PROMPT was replaced by FIX_PLAN_SYSTEM_PROMPT in the dual-delivery redesign"
+    )

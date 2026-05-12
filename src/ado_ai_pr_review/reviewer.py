@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 
 from ado_ai_pr_review.models import FixPlanResult, ReviewCommand, ReviewResult
@@ -18,45 +17,6 @@ Return only JSON matching the supplied schema.
 Focus on secrets, injection, authentication, authorization, input validation, unsafe deserialization, and sensitive data handling.
 Do not include secret values.
 """
-
-
-def _build_fix_schema() -> str:
-    """Return a ReviewResult JSON schema where Finding.suggested_code is required (not nullable)."""
-    schema = copy.deepcopy(ReviewResult.model_json_schema())
-    finding = schema["$defs"]["Finding"]
-    # Make suggested_code a required non-null string
-    finding["properties"]["suggested_code"] = {"type": "string", "title": "Suggested Code"}
-    required: list[str] = finding.setdefault("required", [])
-    if "suggested_code" not in required:
-        required.append("suggested_code")
-    if "file_path" not in required:
-        required.append("file_path")
-    if "line_start" not in required:
-        required.append("line_start")
-    if "line_end" not in required:
-        required.append("line_end")
-    return json.dumps(schema, indent=2)
-
-
-FIX_SYSTEM_PROMPT = (
-    "You are a mechanical code fixer for an Azure DevOps pull request.\n"
-    "Return ONLY raw JSON (no markdown, no prose) matching the schema below.\n"
-    "Only emit findings with type \"mechanical_fix\".\n"
-    "\n"
-    "Every finding MUST include suggested_code, file_path, line_start, and line_end.\n"
-    "suggested_code = THE COMPLETE NEW CONTENT OF THE FILE after the fix is applied.\n"
-    "This is the ENTIRE file, not just the changed lines. The fixer will overwrite the\n"
-    "file with this content. No ellipsis, no truncation, no '// ... rest of file'.\n"
-    "line_start and line_end indicate which lines you changed (for documentation only).\n"
-    "If you cannot provide the full file content, OMIT that finding entirely.\n"
-    "\n"
-    "Only propose changes from the mechanical fix whitelist in the fixer instructions.\n"
-    "Do not change business logic, algorithms, or API contracts.\n"
-    "Do not include secret values.\n"
-    "\n"
-    "Schema (suggested_code, file_path, line_start, line_end are ALL REQUIRED):\n"
-    + _build_fix_schema()
-)
 
 
 def _build_fix_plan_system_prompt() -> str:
@@ -94,7 +54,6 @@ FIX_PLAN_SYSTEM_PROMPT = _build_fix_plan_system_prompt()
 
 _SYSTEM_PROMPT = {
     ReviewCommand.SECURITY: SECURITY_SYSTEM_PROMPT,
-    ReviewCommand.FIX: FIX_SYSTEM_PROMPT,
 }
 
 
