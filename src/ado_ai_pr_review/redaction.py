@@ -9,7 +9,7 @@ _DEFAULT_PATTERNS = (
     re.compile(r"gh[pousr]_[A-Za-z0-9_]{36,}"),
     re.compile(r"github_pat_[A-Za-z0-9_]{82}"),
     re.compile(r"DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[A-Za-z0-9+/=]{40,}"),
-    re.compile(r"-----BEGIN [A-Z ]+PRIVATE KEY-----", re.MULTILINE),
+    re.compile(r"-----BEGIN ([A-Z ]+PRIVATE KEY)-----.*?-----END \1-----", re.DOTALL),
 )
 
 

@@ -18,6 +18,22 @@ def test_secret_redactor_replaces_known_token_patterns() -> None:
     assert redacted.count("[REDACTED]") == 2
 
 
+def test_secret_redactor_replaces_full_private_key_block() -> None:
+    redactor = SecretRedactor()
+    private_key = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIEpAIBAAKCAQEAuV8Fj6aU2h5U3ZP7VmYb6t9Tx7xA0m2Q\n"
+        "q3VkJ9dC2r1YfE5pL8nB4cS6dT0aZx9WvK1hG7mN5bR2pQ8\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
+
+    redacted = redactor.redact(f"before\n{private_key}\nafter")
+
+    assert redacted == "before\n[REDACTED]\nafter"
+    assert "MIIEpAIBAAKCAQEA" not in redacted
+    assert "-----END RSA PRIVATE KEY-----" not in redacted
+
+
 def test_secret_redactor_handles_empty_values() -> None:
     redactor = SecretRedactor(secrets=["", "   ", "real-secret"])
 
