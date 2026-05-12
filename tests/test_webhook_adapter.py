@@ -6,7 +6,8 @@ from typing import Any
 import pytest
 from pytest_mock import MockerFixture
 
-from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter, AdoWebhookPayload
+from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter
+from ado_ai_pr_review.adapters.webhook_payload import AdoWebhookPayload
 
 _PR_CREATED_PAYLOAD = {
     "eventType": "git.pullrequest.created",

@@ -13,7 +13,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter, AdoWebhookPayload
+from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter
+from ado_ai_pr_review.adapters.webhook_payload import AdoWebhookPayload
 from ado_ai_pr_review.auth import build_ado_auth_strategy
 from ado_ai_pr_review.engine import ReviewEngine
 from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
