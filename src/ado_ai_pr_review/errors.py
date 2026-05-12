@@ -20,3 +20,7 @@ class WorkspaceBoundaryError(AdoAiReviewError):
 
 class ModelOutputError(AdoAiReviewError):
     """Raised when model output cannot be parsed or validated."""
+
+
+class AdoApiError(AdoAiReviewError):
+    """Raised when an Azure DevOps REST API call returns an error response."""

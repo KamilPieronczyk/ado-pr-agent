@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 import json
+import urllib.error
 import urllib.request
 from collections.abc import Mapping
 from typing import Any, cast
 
 from ado_ai_pr_review.auth import AdoAuthStrategy
+from ado_ai_pr_review.errors import AdoApiError
 
 
 class AdoRestClient:
@@ -21,5 +24,11 @@ class AdoRestClient:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
-        with urllib.request.urlopen(request, timeout=self._timeout_seconds) as response:
-            return cast(Any, json.loads(response.read().decode("utf-8")))
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout_seconds) as response:
+                return cast(Any, json.loads(response.read().decode("utf-8")))
+        except urllib.error.HTTPError as exc:
+            error_body = ""
+            with contextlib.suppress(Exception):
+                error_body = exc.read().decode("utf-8", errors="replace")
+            raise AdoApiError(f"{exc.code} {exc.reason} for {url}: {error_body}") from exc

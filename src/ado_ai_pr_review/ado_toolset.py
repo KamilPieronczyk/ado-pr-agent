@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import urllib.parse
 from collections.abc import Mapping
-from typing import Any
+from typing import Protocol
 
 from ado_ai_pr_review.ado_context import AdoContext
 
 
+class _RestClient(Protocol):
+    def request_json(self, *, method: str, url: str, body: Mapping[str, object] | None = None) -> object: ...
+
+
 class AdoToolset:
-    def __init__(self, rest_client: Any, context: AdoContext) -> None:
+    def __init__(self, rest_client: _RestClient, context: AdoContext) -> None:
         self._rest = rest_client
         self._context = context
 
