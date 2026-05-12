@@ -69,3 +69,49 @@ def test_fixer_raises_when_no_commits_produced(mocker: MockerFixture, tmp_path: 
             branch_name="ai-fix/pr-42/9001",
             target_branch="feature",
         )
+
+
+def test_fixer_rejects_candidate_path_outside_repo(mocker: MockerFixture, tmp_path: Path) -> None:
+    git = mocker.Mock()
+    ado = mocker.Mock()
+    fixer = MechanicalFixer(git_toolset=git, ado_toolset=ado, repo_root=tmp_path)
+    candidates = [
+        FixCandidate(
+            delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
+            title="Format imports",
+            explanation="Import cleanup.",
+            file_path="../other-repo/app.py",
+            replacement="import os\n",
+            commit_message="fix: format imports",
+        )
+    ]
+
+    with pytest.raises(RuntimeError, match="No mechanical candidates"):
+        fixer.create_fix_branch(candidates, branch_name="ai-fix/pr-42/1", target_branch="main")
+
+    git.add.assert_not_called()
+
+
+def test_fixer_rejects_symlink_write_target(mocker: MockerFixture, tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside.py"
+    outside.write_text("print('outside')\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").symlink_to(outside)
+    git = mocker.Mock()
+    ado = mocker.Mock()
+    fixer = MechanicalFixer(git_toolset=git, ado_toolset=ado, repo_root=tmp_path)
+    candidates = [
+        FixCandidate(
+            delivery=FixDelivery.FIX_BRANCH_CANDIDATE,
+            title="Format imports",
+            explanation="Import cleanup.",
+            file_path="src/app.py",
+            replacement="import os\n",
+            commit_message="fix: format imports",
+        )
+    ]
+
+    with pytest.raises(RuntimeError, match="No mechanical candidates"):
+        fixer.create_fix_branch(candidates, branch_name="ai-fix/pr-42/1", target_branch="main")
+
+    assert outside.read_text(encoding="utf-8") == "print('outside')\n"

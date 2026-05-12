@@ -7,12 +7,14 @@ from pathlib import Path
 import typer
 
 from ado_ai_pr_review.cli_runner import CliRunner
+from ado_ai_pr_review.errors import WorkspaceBoundaryError
 from ado_ai_pr_review.fixer import MechanicalFixer
 from ado_ai_pr_review.git_toolset import GitToolset
 from ado_ai_pr_review.models import FixCandidate, FixDelivery, ReviewCommand, ReviewResult
 from ado_ai_pr_review.ports import PRContext, ReviewRequest
 from ado_ai_pr_review.security import SecurityScanner
 from ado_ai_pr_review.tool_policy import CommandPolicy
+from ado_ai_pr_review.workspace import WorkspaceBoundary
 
 logger = logging.getLogger(__name__)
 
@@ -90,15 +92,24 @@ class LocalCliAdapter:
         if not allowed:
             typer.echo("No mechanical fix candidates.")
             return False
+        workspace = WorkspaceBoundary(self._repo_root)
         self._git.checkout_new_branch(branch_name)
+        commits_created = 0
         for candidate in allowed:
             assert candidate.file_path is not None
             assert candidate.replacement is not None
             assert candidate.commit_message is not None
-            path = self._repo_root / candidate.file_path
-            path.write_text(candidate.replacement, encoding="utf-8")
+            try:
+                workspace.safe_write_text(candidate.file_path, candidate.replacement)
+            except WorkspaceBoundaryError:
+                logger.warning("skipping unsafe fix candidate: %s", candidate.file_path)
+                continue
             self._git.add([candidate.file_path])
             sha = self._git.commit(candidate.commit_message)
             typer.echo(f"  {sha[:8]} {candidate.commit_message}")
+            commits_created += 1
+        if commits_created == 0:
+            typer.echo("No mechanical fix candidates.")
+            return False
         typer.echo(f"Fix branch '{branch_name}' created locally (not pushed).")
         return False

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from ado_ai_pr_review.ado_toolset import AdoToolset
+from ado_ai_pr_review.errors import WorkspaceBoundaryError
 from ado_ai_pr_review.git_toolset import GitToolset
 from ado_ai_pr_review.models import FixCandidate, FixDelivery
+from ado_ai_pr_review.workspace import WorkspaceBoundary
+
+logger = logging.getLogger(__name__)
 
 MECHANICAL_WORDS = {
     "format",
@@ -40,6 +45,7 @@ class MechanicalFixer:
     ) -> object:
         if self._git is None or self._ado is None:
             raise RuntimeError("Git and ADO toolsets are required to create a fix branch")
+        workspace = WorkspaceBoundary(self._repo_root) if self._repo_root is not None else None
         self._git.checkout_new_branch(branch_name)
         commit_shas: list[str] = []
         for candidate in candidates:
@@ -47,8 +53,13 @@ class MechanicalFixer:
                 continue
             if not candidate.file_path or candidate.replacement is None or not candidate.commit_message:
                 continue
-            write_path = (self._repo_root / candidate.file_path) if self._repo_root else Path(candidate.file_path)
-            write_path.write_text(candidate.replacement, encoding="utf-8")
+            if workspace is None:
+                continue
+            try:
+                workspace.safe_write_text(candidate.file_path, candidate.replacement)
+            except WorkspaceBoundaryError:
+                logger.warning("skipping unsafe fix candidate: %s", candidate.file_path)
+                continue
             self._git.add([candidate.file_path])
             commit_shas.append(self._git.commit(candidate.commit_message))
         if not commit_shas:
