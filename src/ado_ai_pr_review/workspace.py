@@ -72,7 +72,9 @@ class WorkspaceBoundary:
 
     def _candidate_path(self, requested_path: str) -> Path:
         path = Path(requested_path)
-        if not path.is_absolute():
+        if path.is_absolute():
+            self._reject_absolute_parent_escape(path, requested_path)
+        else:
             self._reject_relative_parent_escape(path, requested_path)
             path = self.root / path
         return path
@@ -88,6 +90,36 @@ class WorkspaceBoundary:
                     raise WorkspaceBoundaryError(f"Path escapes outside workspace: {requested_path}")
                 continue
             depth += 1
+
+    def _reject_absolute_parent_escape(self, path: Path, requested_path: str) -> None:
+        if ".." not in path.parts:
+            return
+
+        root_parts = self.root.parts
+        if path.parts[: len(root_parts)] != root_parts:
+            raise WorkspaceBoundaryError(f"Path escapes outside workspace: {requested_path}")
+
+        current_parts: list[str] = []
+        entered_workspace = False
+
+        for part in path.parts:
+            if part in ("", "."):
+                continue
+            if part == "..":
+                if len(current_parts) > 1:
+                    current_parts.pop()
+            else:
+                current_parts.append(part)
+
+            current = tuple(current_parts)
+            if self._is_under_root_parts(current, root_parts):
+                entered_workspace = True
+                continue
+            if entered_workspace:
+                raise WorkspaceBoundaryError(f"Path escapes outside workspace: {requested_path}")
+
+    def _is_under_root_parts(self, path_parts: tuple[str, ...], root_parts: tuple[str, ...]) -> bool:
+        return len(path_parts) >= len(root_parts) and path_parts[: len(root_parts)] == root_parts
 
     def _require_inside(self, path: Path, requested_path: str) -> None:
         if not path.is_relative_to(self.root):
