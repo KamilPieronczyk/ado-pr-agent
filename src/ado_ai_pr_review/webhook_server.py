@@ -7,6 +7,7 @@ import os
 import secrets
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -39,7 +40,7 @@ def _build_model() -> LLMPort:
 app = FastAPI(title="ADO AI PR Review Webhook")
 
 
-def _sanitize_errors(errors: list[dict]) -> list[dict]:
+def _sanitize_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Strip non-serializable values (e.g. exception objects) from Pydantic error ctx dicts."""
     sanitized = []
     for err in errors:
@@ -60,7 +61,7 @@ async def _log_validation_error(request: Request, exc: RequestValidationError) -
         errors,
         body.decode("utf-8", errors="replace"),
     )
-    return JSONResponse(status_code=422, content={"detail": _sanitize_errors(errors)})
+    return JSONResponse(status_code=422, content={"detail": _sanitize_errors(list(errors))})
 
 
 def _verify_basic_auth(request: Request) -> None:

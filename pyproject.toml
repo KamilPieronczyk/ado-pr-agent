@@ -37,3 +37,8 @@ ado-ai-pr-review = "ado_ai_pr_review.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ado_ai_pr_review"]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20260510",
+]

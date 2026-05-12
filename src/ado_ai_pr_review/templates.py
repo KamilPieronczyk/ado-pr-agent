@@ -15,10 +15,7 @@ def _read(rel: str) -> str:
     node = _DATA
     for part in parts:
         node = node / part
-    # type: ignore[union-attr] because mypy stubs for importlib.resources type
-    # Traversable.__truediv__ as returning Optional[Traversable], but the runtime
-    # value is always Traversable. read_text() is defined on Traversable.
-    return node.read_text(encoding="utf-8")  # type: ignore[union-attr]
+    return node.read_text(encoding="utf-8")
 
 
 BOOTSTRAP_FILES: dict[str, str] = {

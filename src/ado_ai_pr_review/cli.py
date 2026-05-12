@@ -75,20 +75,20 @@ def serve(
 ) -> None:
     """Start the webhook server for Azure Container Apps deployment."""
     configure_logging(verbose=verbose)
-    import uvicorn  # type: ignore[import-not-found]
+    import uvicorn
 
-    import ado_ai_pr_review.webhook_server as _ws  # type: ignore[import-untyped]
+    import ado_ai_pr_review.webhook_server as _ws
     uvicorn.run(_ws.app, host=host, port=port)
 
 
 def _build_model(llm: str) -> LLMPort:
     if llm == "copilot":
         try:
-            from ado_ai_pr_review.cli_runner import CliRunner  # noqa: I001
-            from ado_ai_pr_review.llm.github_copilot import GitHubCopilotClient  # type: ignore[import-untyped]
+            from ado_ai_pr_review.cli_runner import CliRunner
+            from ado_ai_pr_review.llm.github_copilot import GitHubCopilotClient
             from ado_ai_pr_review.tool_policy import CommandPolicy
             runner = CliRunner(policy=CommandPolicy.default())
-            return GitHubCopilotClient(runner=runner)  # type: ignore[no-any-return]
+            return GitHubCopilotClient(runner=runner)
         except ImportError as exc:
             raise typer.BadParameter("--llm copilot requires llm/github_copilot.py (Task 9)") from exc
     return ModelClient(
