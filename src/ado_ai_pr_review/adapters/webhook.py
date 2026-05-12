@@ -10,6 +10,7 @@ from ado_ai_pr_review.ado_rest import AdoRestClient
 from ado_ai_pr_review.ado_toolset import AdoToolset
 from ado_ai_pr_review.adapters.webhook_payload import AdoWebhookPayload
 from ado_ai_pr_review.auth import AdoAuthStrategy
+from ado_ai_pr_review.bootstrap import Bootstrapper
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.commands import CommandRouter
 from ado_ai_pr_review.git_toolset import GitToolset
@@ -116,7 +117,10 @@ class AdoWebhookAdapter:
             )
 
         target_ref = self._target_ref.removeprefix("refs/heads/")
-        diff_text = self._git.diff(f"origin/{target_ref}...HEAD", unified=0)
+        # --depth clone uses --single-branch so origin/<target_ref> is absent.
+        # Fetch sets FETCH_HEAD to the target tip; use that for the diff range.
+        self._git.fetch_branch("origin", target_ref)
+        diff_text = self._git.diff("FETCH_HEAD...HEAD", unified=0)
         local_findings, redacted_diff = SecurityScanner().scan_diff(diff_text)
 
         return ReviewRequest(
@@ -180,6 +184,38 @@ class AdoWebhookAdapter:
             )
         except Exception as exc:
             logger.warning("fix branch pushed but PR creation failed: %s", exc)
+        return True
+
+    def create_config_pr(self) -> bool:
+        if self._git is None or self._ado is None:
+            logger.warning("create_config_pr called before load_request(); skipping")
+            return False
+        created = Bootstrapper().create_missing_files(self._temp_dir)
+        if not created:
+            return False
+
+        branch_name = "ai-config/setup"
+        target_branch = self._target_ref.removeprefix("refs/heads/")
+        self._git.checkout_new_branch(branch_name)
+        self._git.add(created)
+        self._git.commit("chore: add ADO AI review configuration")
+        self._git.push("origin", branch_name)
+        description = (
+            "This PR adds the ADO AI review configuration (`.ado-ai-review.yml`) "
+            "and default instruction and guideline files.\n\n"
+            "Generated automatically: an `/ai review` command was received "
+            "but no configuration was found in the repository.\n\n"
+            "Review and customise the settings before merging."
+        )
+        try:
+            self._ado.create_pr(
+                source_branch=branch_name,
+                target_branch=target_branch,
+                title="chore: add ADO AI review configuration",
+                description=description,
+            )
+        except Exception as exc:
+            logger.warning("config branch pushed but PR creation failed: %s", exc)
         return True
 
     def _make_pr_context(self) -> PRContext:
