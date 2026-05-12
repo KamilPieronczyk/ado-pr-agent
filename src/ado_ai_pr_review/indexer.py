@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 from pathlib import Path
 
 from ado_ai_pr_review.models import RepoIndexEntry
@@ -30,9 +29,6 @@ class RepoIndexer:
                 )
             )
         return entries
-
-    def _is_excluded(self, relative: str) -> bool:
-        return any(fnmatch.fnmatch(relative, pattern) for pattern in self._exclude)
 
     @staticmethod
     def _language(relative: str) -> str:

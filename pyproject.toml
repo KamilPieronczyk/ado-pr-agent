@@ -7,6 +7,10 @@ name = "ado-ai-pr-review"
 version = "0.1.0"
 description = "Azure DevOps CLI-first AI pull request reviewer"
 readme = "README.md"
+license = { text = "Apache-2.0" }
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+]
 requires-python = ">=3.12"
 dependencies = [
   "azure-identity>=1.21.0",

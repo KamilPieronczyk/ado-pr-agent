@@ -1,0 +1,135 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": true,
+      "basics": {
+        "description": "Deploy **ADO AI PR Review** — an AI-powered pull request reviewer for Azure DevOps. The webhook receives ADO service hook events and posts AI-generated review comments using your Azure OpenAI instance."
+      }
+    },
+    "basics": [],
+    "steps": [
+      {
+        "name": "appConfig",
+        "label": "Application",
+        "elements": [
+          {
+            "name": "appName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Application name",
+            "toolTip": "Short name used to derive all Azure resource names (e.g. 'myadobot').",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-z][a-z0-9]{2,11}$",
+              "validationMessage": "3-12 lowercase letters and digits, must start with a letter."
+            }
+          },
+          {
+            "name": "imageTag",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Image tag",
+            "defaultValue": "latest",
+            "toolTip": "Docker image tag from ghcr.io/kamilpieronczyk/ado-pr-agent. Use 'latest' or a specific version like 'v1.0.2'.",
+            "constraints": {
+              "required": false
+            }
+          }
+        ]
+      },
+      {
+        "name": "openAiConfig",
+        "label": "Azure OpenAI",
+        "elements": [
+          {
+            "name": "deploymentName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Model deployment name",
+            "defaultValue": "gpt-4o",
+            "toolTip": "The name of the Azure OpenAI model deployment to use. Create this deployment in Azure AI Foundry after the application is deployed.",
+            "constraints": {
+              "required": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "adoConfig",
+        "label": "Azure DevOps",
+        "elements": [
+          {
+            "name": "adoInfoBox",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Create a Personal Access Token in Azure DevOps with 'Code (Read)', 'Pull Request Threads (Read & Write)', and 'Git (Read)' permissions. The token is stored securely in Azure Key Vault."
+            }
+          },
+          {
+            "name": "adoAuthToken",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Azure DevOps PAT",
+              "confirmPassword": "Confirm PAT"
+            },
+            "constraints": {
+              "required": true,
+              "regex": "^.{20,}$",
+              "validationMessage": "PAT must be at least 20 characters."
+            }
+          }
+        ]
+      },
+      {
+        "name": "webhookConfig",
+        "label": "Webhook Security",
+        "elements": [
+          {
+            "name": "webhookInfoBox",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Configure Basic Auth credentials to secure the webhook endpoint. Azure DevOps will use these credentials when calling the webhook."
+            }
+          },
+          {
+            "name": "webhookUsername",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Webhook username",
+            "defaultValue": "ado-webhook",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9_-]{3,32}$",
+              "validationMessage": "3-32 alphanumeric characters, underscores, or hyphens."
+            }
+          },
+          {
+            "name": "webhookPassword",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Webhook password",
+              "confirmPassword": "Confirm password"
+            },
+            "constraints": {
+              "required": true,
+              "regex": "^.{12,}$",
+              "validationMessage": "Password must be at least 12 characters."
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "appName": "[steps('appConfig').appName]",
+      "imageTag": "[steps('appConfig').imageTag]",
+      "openAiDeploymentName": "[steps('openAiConfig').deploymentName]",
+      "adoAuthToken": "[steps('adoConfig').adoAuthToken.password]",
+      "webhookUsername": "[steps('webhookConfig').webhookUsername]",
+      "webhookPassword": "[steps('webhookConfig').webhookPassword.password]"
+    }
+  }
+}

@@ -9,16 +9,44 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter, AdoWebhookPayload
 from ado_ai_pr_review.engine import ReviewEngine
 from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
+from ado_ai_pr_review.ports import LLMPort
 
 logger = logging.getLogger(__name__)
 
 _background_tasks: set[asyncio.Task[None]] = set()
 
+
+def _build_model() -> LLMPort:
+    if os.getenv("LLM_PROVIDER") == "copilot":
+        from ado_ai_pr_review.cli_runner import CliRunner
+        from ado_ai_pr_review.llm.github_copilot import GitHubCopilotClient
+        from ado_ai_pr_review.tool_policy import CommandPolicy
+
+        runner = CliRunner(policy=CommandPolicy.default())
+        return GitHubCopilotClient(runner=runner)
+    return ModelClient(
+        openai_client=build_openai_client(),  # type: ignore[arg-type]
+        deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
+    )
+
 app = FastAPI(title="ADO AI PR Review Webhook")
+
+
+@app.exception_handler(RequestValidationError)
+async def _log_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    body = await request.body()
+    logger.error(
+        "Webhook payload validation failed: %s | body=%.2000s",
+        exc.errors(),
+        body.decode("utf-8", errors="replace"),
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 def _verify_basic_auth(request: Request) -> None:
@@ -73,10 +101,7 @@ def _process_sync(payload: AdoWebhookPayload, auth_token: str) -> None:
         temp_dir = Path(tmp)
         try:
             adapter = AdoWebhookAdapter(payload=payload, auth_token=auth_token, temp_dir=temp_dir)
-            model = ModelClient(
-                openai_client=build_openai_client(),  # type: ignore[arg-type]
-                deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-            )
+            model = _build_model()
             engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
             engine.run()
         except Exception:

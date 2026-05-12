@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +18,9 @@ class CommandRouter:
     def route(self, threads_payload: dict[str, Any]) -> CommandDecision:
         candidates: list[tuple[str, int, str]] = []
         for thread in threads_payload.get("value", []):
+            # Skip threads created by the agent itself to avoid self-triggering.
+            if "adoAiReview.kind" in thread.get("properties", {}):
+                continue
             thread_id = int(thread.get("id", 0))
             published = str(thread.get("publishedDate", ""))
             for comment in thread.get("comments", []):

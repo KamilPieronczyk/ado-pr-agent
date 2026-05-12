@@ -47,6 +47,10 @@ class ReviewEngine:
             self._platform.publish_error(exc)
             raise
 
+        if request.command is ReviewCommand.SKIP:
+            logger.debug("skipping event: unrecognised inline comment, no action taken")
+            return ReviewCommand.SKIP
+
         if request.command is ReviewCommand.ONBOARDING:
             self._platform.publish_onboarding()
             return ReviewCommand.ONBOARDING

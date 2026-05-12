@@ -1,7 +1,12 @@
 # ADO AI PR Review
 
-Azure DevOps AI pull request reviewer. Runs as a Docker container in Azure DevOps Pipelines,
-reacts to `/ai` commands in PR comments, and posts code review findings, security findings,
+Azure DevOps AI pull request reviewer. Runs in three modes:
+
+- **Pipeline** — Docker container in Azure DevOps Pipelines (current production mode)
+- **Local** — CLI against the current git branch, output to stdout (no ADO credentials needed)
+- **Webhook** — persistent FastAPI server in Azure Container Apps, receives ADO service hooks
+
+Reacts to `/ai` commands in PR comments and posts code review findings, security findings,
 and mechanical fix suggestions.
 
 ## Quick Start
@@ -226,6 +231,69 @@ The files under `.ado-ai-review/guidelines/` are always-on context loaded for ev
 Existing files like `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` are
 loaded automatically if they exist and are listed under `guidelines.code_style`.
 
+## Local Mode
+
+Run a review against the current git branch without any ADO credentials. The diff is
+computed against a remote branch (`origin/main` by default) and results are printed to
+stdout.
+
+```bash
+# Using Azure OpenAI (requires AZURE_OPENAI_* env vars)
+export AZURE_OPENAI_BASE_URL=https://...openai.azure.com/openai/v1/
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+ado-ai-pr-review local --command review
+
+# Using GitHub Copilot (requires an active Copilot subscription + gh CLI login)
+gh auth login
+ado-ai-pr-review local --command review --llm copilot
+
+# Review against a different base branch
+ado-ai-pr-review local --command security --target-branch develop
+```
+
+Available `--command` values: `review`, `security`, `fix`.
+
+No ADO environment variables are needed in local mode. Bootstrap files are created in the
+current repository if they are missing.
+
+## Webhook / Container Apps
+
+The `serve` subcommand starts a FastAPI server that receives Azure DevOps service hooks and
+runs reviews automatically, without a pipeline job.
+
+### Setup
+
+1. Deploy the Docker image to Azure Container Apps with the environment variables below.
+2. In your ADO project, go to **Project Settings → Service hooks → Create subscription**.
+3. Select **Web Hooks** and configure it to trigger on:
+   - *Pull request created*
+   - *Pull request updated*
+   - *Pull request commented on*
+4. Set the webhook URL to `https://<your-container-app>/webhook/ado`.
+5. Set the HTTP header `ADO_AUTH_TOKEN` via the service hook basic auth or a custom header
+   (see `docs/follow-ups/webhook-auth.md` for authentication options and current limitations).
+
+### Additional Environment Variable (webhook mode only)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ADO_AUTH_TOKEN` | Yes | Personal access token or managed identity token for ADO REST API calls from the webhook server. |
+
+The `AZURE_OPENAI_*` variables listed above are also required in webhook mode.
+
+### Running locally
+
+```bash
+export ADO_AUTH_TOKEN=...
+export AZURE_OPENAI_BASE_URL=https://...openai.azure.com/openai/v1/
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+ado-ai-pr-review serve --host 0.0.0.0 --port 8080
+```
+
+The server exposes:
+- `POST /webhook/ado` — ADO service hook receiver (returns 200 immediately, processes async)
+- `GET /health` — liveness/readiness probe for Container Apps
+
 ## Security Boundary
 
 The model never receives a raw shell tool. Every write action (git push, PR comment) is
@@ -245,7 +313,7 @@ ruff check src tests
 mypy src
 ```
 
-To run against a real PR (read-only, no writes):
+To run the pipeline adapter locally against a real PR (read-only, no writes):
 
 ```bash
 export SYSTEM_ACCESSTOKEN=...
@@ -255,5 +323,5 @@ export BUILD_REPOSITORY_ID=...
 export SYSTEM_PULLREQUEST_PULLREQUESTID=123
 export AZURE_OPENAI_BASE_URL=https://...openai.azure.com/openai/v1/
 export AZURE_OPENAI_DEPLOYMENT=gpt-4o
-ado-ai-pr-review run --repo-root . --dry-run
+ado-ai-pr-review pipeline --repo-root . --dry-run
 ```

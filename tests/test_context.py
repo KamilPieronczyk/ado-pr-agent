@@ -81,3 +81,17 @@ def test_context_selector_skips_symlinked_dynamic_file(tmp_path: Path) -> None:
     )
 
     assert selected.dynamic_files == []
+
+
+def test_context_selector_skips_symlinked_guidance_file(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-guidance.md"
+    outside.write_text("secret\n", encoding="utf-8")
+    (tmp_path / "guidance.md").symlink_to(outside)
+
+    selected = ContextSelector(max_files=1).select(
+        repo_root=tmp_path,
+        guidance_paths=["guidance.md"],
+        entries=[],
+    )
+
+    assert selected.always_on_guidance == []

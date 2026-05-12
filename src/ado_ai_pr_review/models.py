@@ -11,6 +11,7 @@ class ReviewCommand(StrEnum):
     SECURITY = "security"
     FIX = "fix"
     ONBOARDING = "onboarding"
+    SKIP = "skip"  # no-op: unrecognised comment, ignore the event
 
 
 class FindingSeverity(StrEnum):
