@@ -31,13 +31,23 @@ class AdoWebhookAdapter:
         request_id: str = "unknown",
     ) -> None:
         self._payload = payload
+        self._auth_strategy = auth_strategy
         self._temp_dir = temp_dir
         self._request_id = request_id
-
+        # These two are cheap (no I/O).
         self._runner = CliRunner(policy=CommandPolicy.default(), secrets=list(auth_strategy.secret_values()))
-        rest_client = AdoRestClient(auth=auth_strategy)
+        self._rest_client = AdoRestClient(auth=auth_strategy)
+        # Set after load_request() is called.
+        self._git: GitToolset | None = None
+        self._ado: AdoToolset | None = None
+        self._publisher: SuggestionPublisher | None = None
+        self._source_ref: str = ""
+        self._target_ref: str = ""
 
-        # For flat-comment events the payload lacks repo/branch info; fetch via REST.
+    def load_request(self) -> ReviewRequest:
+        payload = self._payload
+
+        # For flat-comment events, fetch PR details to get repo/branch info.
         if payload.is_flat_comment_event:
             org = payload.organization_url.rstrip("/")
             if payload.repository_id:
@@ -45,7 +55,7 @@ class AdoWebhookAdapter:
             else:
                 url = f"{org}/_apis/git/pullRequests/{payload.pull_request_id}?api-version=7.0"
             try:
-                pr_details = cast(dict[str, Any], rest_client.request_json(method="GET", url=url))
+                pr_details = cast(dict[str, Any], self._rest_client.request_json(method="GET", url=url))
             except Exception as exc:
                 logger.error("Failed to fetch PR details: %s", exc, exc_info=True)
                 pr_details = {}
@@ -55,41 +65,41 @@ class AdoWebhookAdapter:
         self._source_ref = payload.source_ref_name or pr_details.get("sourceRefName", "")
         self._target_ref = payload.target_ref_name or pr_details.get("targetRefName", "")
         repo_info: dict[str, Any] = pr_details.get("repository", {})
-        self._remote_url = payload.remote_url or repo_info.get("remoteUrl", "")
-        self._repo_name = payload.repository_name or repo_info.get("name", "")
-        self._repo_id = payload.repository_id or repo_info.get("id", "")
-        self._project_name = payload.project_name or repo_info.get("project", {}).get("name", "")
+        remote_url = payload.remote_url or repo_info.get("remoteUrl", "")
+        repo_name = payload.repository_name or repo_info.get("name", "")
+        repo_id = payload.repository_id or repo_info.get("id", "")
+        project_name = payload.project_name or repo_info.get("project", {}).get("name", "")
 
-        # Clone the repo branch into temp_dir
+        # Clone the source branch.
         source_branch = self._source_ref.removeprefix("refs/heads/")
-        self._git = GitToolset(runner=self._runner, repo_root=temp_dir)
+        self._git = GitToolset(runner=self._runner, repo_root=self._temp_dir)
         self._git.clone(
-            remote_url=self._remote_url,
+            remote_url=remote_url,
             branch=source_branch,
-            destination=temp_dir,
-            auth_strategy=auth_strategy,
+            destination=self._temp_dir,
+            auth_strategy=self._auth_strategy,
         )
 
+        # Wire up ADO toolset and publisher.
         context = AdoContext(
-            repo_root=temp_dir,
+            repo_root=self._temp_dir,
             organization_url=payload.organization_url,
-            project=self._project_name,
-            repository_id=self._repo_id,
-            repository_name=self._repo_name,
+            project=project_name,
+            repository_id=repo_id,
+            repository_name=repo_name,
             pull_request_id=payload.pull_request_id,
             source_branch=self._source_ref,
             target_branch=self._target_ref,
             is_fork=False,
             run_id="webhook",
         )
-        self._ado = AdoToolset(rest_client=rest_client, context=context)
+        self._ado = AdoToolset(rest_client=self._rest_client, context=context)
         self._publisher = SuggestionPublisher(ado_toolset=self._ado)
 
-    def load_request(self) -> ReviewRequest:
-        if self._payload.inline_command is not None:
-            command = CommandRouter.detect_command(self._payload.inline_command)
+        # Detect command from inline comment or PR threads.
+        if payload.inline_command is not None:
+            command = CommandRouter.detect_command(payload.inline_command)
             if command is None:
-                # Unrecognised comment (e.g. agent's own reply) — skip silently.
                 command = ReviewCommand.SKIP
         else:
             threads = cast(dict[str, Any], self._ado.list_pr_threads())
@@ -118,23 +128,26 @@ class AdoWebhookAdapter:
         )
 
     def publish_onboarding(self) -> None:
-        self._publisher.publish_onboarding()
+        if self._publisher is not None:
+            self._publisher.publish_onboarding()
 
     def publish_review(self, result: ReviewResult) -> None:
-        self._publisher.publish_review(result)
+        if self._publisher is not None:
+            self._publisher.publish_review(result)
 
     def publish_error(self, exc: BaseException) -> None:
         logger.error("webhook review failed: %s", exc, exc_info=True)
-        with contextlib.suppress(Exception):
-            self._ado.create_pr_thread(body={
-                "comments": [{
-                    "parentCommentId": 0,
-                    "content": f"ADO AI review failed: {type(exc).__name__}. Check webhook logs for details.",
-                    "commentType": "text",
-                }],
-                "status": "active",
-                "properties": {"adoAiReview.kind": {"$type": "System.String", "$value": "error"}},
-            })
+        if self._ado is not None:
+            with contextlib.suppress(Exception):
+                self._ado.create_pr_thread(body={
+                    "comments": [{
+                        "parentCommentId": 0,
+                        "content": f"ADO AI review failed: {type(exc).__name__}. Check webhook logs for details.",
+                        "commentType": "text",
+                    }],
+                    "status": "active",
+                    "properties": {"adoAiReview.kind": {"$type": "System.String", "$value": "error"}},
+                })
 
     def create_fix_branch(
         self,
@@ -142,6 +155,9 @@ class AdoWebhookAdapter:
         branch_name: str,
         target_branch: str,
     ) -> bool:
+        if self._git is None or self._ado is None:
+            logger.warning("create_fix_branch called before load_request(); skipping")
+            return False
         from ado_ai_pr_review.fixer import MechanicalFixer, MechanicalFixPolicy
 
         policy = MechanicalFixPolicy()

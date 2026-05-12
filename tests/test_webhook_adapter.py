@@ -91,15 +91,23 @@ class FakeAuth:
         return ("entra-token",)
 
 
-def test_webhook_adapter_clones_with_auth_strategy_not_url_token(mocker: MockerFixture, tmp_path: Path) -> None:
+def test_webhook_adapter_load_request_clones_with_auth_strategy(mocker: MockerFixture, tmp_path: Path) -> None:
     payload = AdoWebhookPayload.model_validate(_PR_CREATED_PAYLOAD)
     runner_cls = mocker.patch("ado_ai_pr_review.adapters.webhook.CliRunner")
     git_cls = mocker.patch("ado_ai_pr_review.adapters.webhook.GitToolset")
-    mocker.patch("ado_ai_pr_review.adapters.webhook.AdoToolset")
+    ado_cls = mocker.patch("ado_ai_pr_review.adapters.webhook.AdoToolset")
     mocker.patch("ado_ai_pr_review.adapters.webhook.AdoRestClient")
     mocker.patch("ado_ai_pr_review.adapters.webhook.SuggestionPublisher")
+    git_cls.return_value.diff.return_value = ""
+    ado_instance = ado_cls.return_value
+    ado_instance.list_pr_threads.return_value = {"value": []}
 
-    AdoWebhookAdapter(payload=payload, auth_strategy=FakeAuth(), temp_dir=tmp_path)
+    adapter = AdoWebhookAdapter(payload=payload, auth_strategy=FakeAuth(), temp_dir=tmp_path)
+
+    # Constructor must be cheap — no clone yet.
+    git_cls.return_value.clone.assert_not_called()
+
+    adapter.load_request()
 
     runner_cls.assert_called_once()
     assert runner_cls.call_args.kwargs["secrets"] == ["entra-token"]
