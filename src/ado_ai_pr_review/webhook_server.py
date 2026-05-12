@@ -116,8 +116,7 @@ async def handle_ado_webhook(payload: AdoWebhookPayload, request: Request) -> di
 
 
 def _process_sync(payload: AdoWebhookPayload, auth_token: str, request_id: str) -> None:
-    with bind_request_context(request_id):
-        with tempfile.TemporaryDirectory() as tmp:
+    with bind_request_context(request_id), tempfile.TemporaryDirectory() as tmp:
             temp_dir = Path(tmp)
             try:
                 adapter = AdoWebhookAdapter(
