@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 import traceback
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TextIO
 
@@ -21,6 +21,35 @@ _STANDARD_LOG_RECORD_FIELDS = frozenset(
         args=(),
         exc_info=None,
     ).__dict__
+)
+_RESERVED_PAYLOAD_FIELDS = frozenset(
+    {
+        "timestamp",
+        "level",
+        "logger",
+        "message",
+        "request_id",
+        "exc_type",
+        "traceback",
+    }
+)
+_ALLOWED_EXTRA_FIELDS = frozenset(
+    {
+        "pr_id",
+        "repository",
+        "repository_id",
+        "repository_name",
+        "event_type",
+        "command",
+        "findings_count",
+        "inline_suggestions_count",
+        "fix_pr_created",
+        "error",
+        "errors",
+        "body_excerpt",
+        "request",
+        "data",
+    }
 )
 
 
@@ -52,19 +81,28 @@ class JsonLogFormatter(logging.Formatter):
     def _extra_fields(self, record: logging.LogRecord) -> dict[str, object]:
         fields: dict[str, object] = {}
         for key, value in record.__dict__.items():
-            if key in _STANDARD_LOG_RECORD_FIELDS or key == "request_id":
+            if (
+                key in _STANDARD_LOG_RECORD_FIELDS
+                or key in _RESERVED_PAYLOAD_FIELDS
+                or key not in _ALLOWED_EXTRA_FIELDS
+            ):
                 continue
-            fields[key] = self._format_extra_value(value)
+            fields[key] = self._sanitize_value(value)
         return fields
 
-    def _format_extra_value(self, value: object) -> object:
+    def _sanitize_value(self, value: object) -> object:
         if isinstance(value, str):
             return self._redactor.redact(value)
-        try:
-            json.dumps(value)
-        except TypeError:
-            return self._redactor.redact(value)
-        return value
+        if value is None or isinstance(value, bool | int | float):
+            return value
+        if isinstance(value, Mapping):
+            return {
+                self._redactor.redact(key): self._sanitize_value(nested_value)
+                for key, nested_value in value.items()
+            }
+        if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+            return [self._sanitize_value(item) for item in value]
+        return self._redactor.redact(value)
 
 
 def configure_logging(
@@ -75,6 +113,8 @@ def configure_logging(
     force: bool = False,
 ) -> None:
     root = logging.getLogger()
+    if root.handlers and not force:
+        return
     if force:
         root.handlers.clear()
 
