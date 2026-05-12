@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import base64
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from ado_ai_pr_review.webhook_server import app
+from ado_ai_pr_review.adapters.webhook_payload import AdoWebhookPayload
+from ado_ai_pr_review.models import ReviewCommand
+from ado_ai_pr_review.webhook_server import _process_sync, app
 
 _PR_CREATED_PAYLOAD = {
     "eventType": "git.pullrequest.created",
@@ -184,3 +187,59 @@ def test_webhook_no_longer_requires_ado_auth_token(monkeypatch: pytest.MonkeyPat
 
     assert response.status_code == 200
     assert response.json()["status"] == "accepted"
+
+
+_PARSED_PAYLOAD = AdoWebhookPayload.model_validate(_PR_CREATED_PAYLOAD)
+
+
+def _make_process_sync_mocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, command: ReviewCommand
+) -> MagicMock:
+    """Patches all external dependencies of _process_sync; returns the adapter mock."""
+    monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
+
+    adapter_mock = MagicMock()
+    engine_mock = MagicMock()
+    engine_mock.run.return_value = command
+
+    patch("ado_ai_pr_review.webhook_server.AdoWebhookAdapter", return_value=adapter_mock).start()
+    patch("ado_ai_pr_review.webhook_server.ReviewEngine", return_value=engine_mock).start()
+    patch("ado_ai_pr_review.webhook_server.build_ado_auth_strategy").start()
+    patch("ado_ai_pr_review.webhook_server.build_llm").start()
+    tmp_ctx = patch("ado_ai_pr_review.webhook_server.tempfile.TemporaryDirectory").start()
+    tmp_ctx.return_value.__enter__.return_value = str(tmp_path)
+    tmp_ctx.return_value.__exit__.return_value = False
+
+    return adapter_mock
+
+
+def test_process_sync_creates_config_pr_when_config_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    adapter_mock = _make_process_sync_mocks(monkeypatch, tmp_path, ReviewCommand.REVIEW)
+
+    _process_sync(_PARSED_PAYLOAD, "req-1")
+
+    adapter_mock.create_config_pr.assert_called_once()
+
+
+def test_process_sync_skips_config_scaffold_when_config_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / ".ado-ai-review.yml").write_text("version: 1\n", encoding="utf-8")
+    adapter_mock = _make_process_sync_mocks(monkeypatch, tmp_path, ReviewCommand.REVIEW)
+
+    _process_sync(_PARSED_PAYLOAD, "req-1")
+
+    adapter_mock.create_config_pr.assert_not_called()
+
+
+def test_process_sync_skips_config_scaffold_for_onboarding(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    adapter_mock = _make_process_sync_mocks(monkeypatch, tmp_path, ReviewCommand.ONBOARDING)
+
+    _process_sync(_PARSED_PAYLOAD, "req-1")
+
+    adapter_mock.create_config_pr.assert_not_called()

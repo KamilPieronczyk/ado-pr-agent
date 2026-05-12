@@ -19,6 +19,7 @@ from ado_ai_pr_review.auth import build_ado_auth_strategy
 from ado_ai_pr_review.engine import ReviewEngine
 from ado_ai_pr_review.llm.factory import build_llm
 from ado_ai_pr_review.log_context import bind_request_context
+from ado_ai_pr_review.models import ReviewCommand
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,9 @@ def _process_sync(payload: AdoWebhookPayload, request_id: str) -> None:
             )
             model = build_llm(os.getenv("LLM_PROVIDER"))
             engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
-            engine.run()
+            command = engine.run()
+            if command not in (ReviewCommand.ONBOARDING, ReviewCommand.SKIP):
+                if not (temp_dir / ".ado-ai-review.yml").exists():
+                    adapter.create_config_pr()
         except Exception:
             logger.exception("webhook processing failed for PR %s", payload.pull_request_id)
