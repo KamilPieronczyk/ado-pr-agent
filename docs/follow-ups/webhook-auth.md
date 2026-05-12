@@ -7,10 +7,11 @@
 
 The `/webhook/ado` endpoint currently has **no incoming request authentication**.
 
-The server checks that `ADO_AUTH_TOKEN` is configured (server-side credential used to call
-ADO REST API), but it does NOT verify that the incoming HTTP request actually came from
-Azure DevOps. Any caller who can reach the Container Apps URL can POST a crafted payload and
-trigger a review — consuming OpenAI tokens and potentially reading repository contents.
+Option A (Basic Auth) has since been implemented and shipped. The server now verifies
+`WEBHOOK_USERNAME` / `WEBHOOK_PASSWORD` on every incoming request using `secrets.compare_digest`.
+ADO REST API calls are authenticated via managed identity (`DefaultAzureCredential`) when
+`ADO_AUTH_MODE=entra` (the default), or via `ADO_PAT` when `ADO_AUTH_MODE=pat`. Any caller
+who can reach the Container Apps URL without valid Basic Auth credentials receives HTTP 401.
 
 Relevant code: `src/ado_ai_pr_review/webhook_server.py`, `handle_ado_webhook()`.
 

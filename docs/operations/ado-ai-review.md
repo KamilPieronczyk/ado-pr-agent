@@ -1,19 +1,25 @@
 # ADO AI PR Review Operations
 
-## Required Azure DevOps Settings
+## Pre-flight Checklist
 
-- The pipeline must run as a PR branch policy so `System.PullRequest.*` variables are populated.
-- The checkout step must use `persistCredentials: true`.
-- Scripts must be allowed to access `System.AccessToken`.
-- The project build service identity needs code read permission to review PRs.
-- To publish comments, the build service identity needs pull request contribute/comment permissions.
-- To create bootstrap commits or fix branches, the build service identity needs branch contribute permission.
+- Container App has `AZURE_CLIENT_ID` set to the managed identity's client ID.
+- The managed identity principal ID has been added to the Azure DevOps organization as a user with Basic access (see README § Azure DevOps Identity Onboarding).
+- The identity has Code (Read) and Pull Request Threads (Read & Write) permissions on the target project.
+- For `/ai fix`: the identity has Contribute permission on the target branch.
+- ADO service hooks are configured to POST to `https://<container-app>/webhook/ado` with Basic Auth credentials matching `WEBHOOK_USERNAME` / `WEBHOOK_PASSWORD`.
+- `ADO_AUTH_MODE` is absent or set to `entra` (default).
 
-## Required Variables
+## Temporary PAT Fallback (local/test only)
 
-- `AZURE_OPENAI_BASE_URL`: Azure OpenAI or Foundry v1 base URL ending in `/openai/v1/`.
+Set `ADO_AUTH_MODE=pat` and `ADO_PAT=<token>` to bypass managed identity. Explicitly for local testing — do not use in production deployments.
+
+## Required Environment Variables
+
+- `AZURE_CLIENT_ID`: managed identity client ID injected by the ARM template.
+- `AZURE_OPENAI_BASE_URL`: Azure OpenAI endpoint.
 - `AZURE_OPENAI_DEPLOYMENT`: model deployment name.
-- `AZURE_OPENAI_API_KEY`: optional when Microsoft Entra authentication is configured.
+- `AZURE_OPENAI_API_KEY`: optional; omit to use managed identity for OpenAI auth.
+- `WEBHOOK_USERNAME` / `WEBHOOK_PASSWORD`: Basic Auth credentials for the webhook endpoint.
 
 ## Commands
 
@@ -23,4 +29,4 @@
 
 ## Security Boundary
 
-The model never receives a raw shell tool. It can only request typed review outputs. All local CLI operations are controlled by Python code, command allowlists, timeouts, output caps, and secret redaction.
+The model never receives a raw shell tool. All write actions (git push, PR comments) are performed by Python code that validates model output first. Secret values detected locally are redacted before any model call.

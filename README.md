@@ -1,25 +1,12 @@
 # ADO AI PR Review
 
-Azure DevOps AI pull request reviewer. Runs in three modes:
+Azure DevOps AI pull request reviewer. Runs in two modes:
 
-- **Pipeline** — Docker container in Azure DevOps Pipelines (current production mode)
+- **Webhook** — FastAPI server in Azure Container Apps, receives ADO service hooks, authenticates to ADO using managed identity (`ADO_AUTH_MODE=entra`, default) or PAT fallback (`ADO_AUTH_MODE=pat`)
 - **Local** — CLI against the current git branch, output to stdout (no ADO credentials needed)
-- **Webhook** — persistent FastAPI server in Azure Container Apps, receives ADO service hooks
 
 Reacts to `/ai` commands in PR comments and posts code review findings, security findings,
 and mechanical fix suggestions.
-
-## Quick Start
-
-1. Create a GitHub service connection in your ADO project (Project Settings → Service connections → GitHub).
-2. Add a pipeline file to your repository (see [Pipeline Setup](#pipeline-setup)).
-3. Create a branch policy that triggers the pipeline on every PR.
-4. Set the required pipeline variables (see [Environment Variables](#environment-variables)).
-5. Open a PR and comment `/ai review`.
-
-> **Note:** The Docker image is published to the GitHub Container Registry (GHCR) as a public
-> package. If the package shows as private, set it to public at
-> GitHub → your profile → Packages → `ado-pr-agent` → Package settings → Change visibility.
 
 ## Available Commands
 
@@ -34,92 +21,81 @@ Comment one of these in any PR discussion thread:
 On the first run (no command yet), the worker posts an onboarding comment listing the commands
 and bootstraps missing configuration files into the repository.
 
-## Pipeline Setup
+## Azure DevOps Identity Onboarding
 
-### Option A — Extends template (recommended)
+Before the webhook can post PR comments and read repositories, the managed identity (or
+service principal) must be added to the Azure DevOps organization. Azure RBAC permissions
+do **not** grant Azure DevOps permissions — they must be configured separately in ADO.
 
-Add a small pipeline file to your repository that references this repo directly.
-No files to copy or maintain — updates are pulled by changing the tag pin.
+1. **Get the managed identity's principal ID** from deployment outputs:
 
-```yaml
-# azure-pipelines.ado-ai-review.yml  (in your repository)
-trigger: none
+   ```bash
+   az deployment group show -g <resource-group> -n <deployment-name> \
+     --query properties.outputs.managedIdentityPrincipalId.value
+   ```
 
-pr:
-  branches:
-    include: ["*"]
+2. **Add the identity to ADO:** Organization Settings → Users → Add user → paste the
+   principal ID, assign **Basic** access level.
 
-resources:
-  repositories:
-    - repository: ado-ai-pr-review
-      type: github
-      name: KamilPieronczyk/ado-pr-agent
-      ref: refs/tags/v1.0.1          # pin to a release tag — check releases for latest
-      endpoint: MyGitHubServiceConnection
+3. **Grant project permissions:** Add the identity to the target project with at minimum:
+   - Code (Read)
+   - Pull Request Threads (Read & Write)
 
-extends:
-  template: templates/pipeline.yml@ado-ai-pr-review
-  parameters:
-    imageVersion: v1.0.1             # must match the tag above
+4. **For `/ai fix` to create fix branches:** additionally grant Contribute on the target
+   branch.
+
+## Webhook / Container Apps
+
+The `serve` subcommand starts a FastAPI server that receives Azure DevOps service hooks and
+runs reviews automatically.
+
+### Setup
+
+1. Deploy the Docker image to Azure Container Apps with the environment variables below.
+2. In your ADO project, go to **Project Settings → Service hooks → Create subscription**.
+3. Select **Web Hooks** and configure it to trigger on:
+   - *Pull request created*
+   - *Pull request updated*
+   - *Pull request commented on*
+4. Set the webhook URL to `https://<your-container-app>/webhook/ado`.
+5. Set Basic Auth credentials in the service hook subscription to match `WEBHOOK_USERNAME`
+   and `WEBHOOK_PASSWORD` (see table below).
+
+### Additional Environment Variables (webhook mode only)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ADO_AUTH_MODE` | No | Authentication mode for ADO REST API. `entra` (default) uses managed identity/DefaultAzureCredential. `pat` requires `ADO_PAT`. |
+| `ADO_PAT` | Only when `ADO_AUTH_MODE=pat` | Personal access token for ADO REST API. For local testing only. |
+| `WEBHOOK_USERNAME` | No | Basic Auth username for the webhook endpoint. Required if `WEBHOOK_PASSWORD` is set. |
+| `WEBHOOK_PASSWORD` | No | Basic Auth password for the webhook endpoint. |
+
+The `AZURE_OPENAI_*` variables listed under [Environment Variables](#environment-variables) are also required in webhook mode.
+
+### Running locally
+
+For local testing of the webhook server, use PAT-based auth:
+
+```bash
+export ADO_AUTH_MODE=pat
+export ADO_PAT=<your-personal-access-token>
+export AZURE_OPENAI_BASE_URL=https://...openai.azure.com/openai/v1/
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+ado-ai-pr-review serve --host 0.0.0.0 --port 8080
 ```
 
-**Requirements:**
-- A GitHub service connection named `MyGitHubServiceConnection` (or any name — update `endpoint:` accordingly).
-- "Grant access to all pipelines" checked on the service connection.
-
-The `checkout`, `persistCredentials`, `fetchDepth`, and `SYSTEM_ACCESSTOKEN` mapping are
-already included in `templates/pipeline.yml` — no extra step configuration needed.
-
-### Option B — Standalone copy
-
-Copy `azure-pipelines.ado-ai-review.yml` from this repository into your target repo.
-Useful when you cannot create a GitHub service connection or need full local control.
-
-The standalone pipeline pulls a pre-built image from GHCR. Override the `imageVersion`
-pipeline variable to pin to a specific release (default: `latest`).
-
-Create an Azure DevOps branch policy that triggers this pipeline on PR creation and update.
-
-### Required ADO Permissions
-
-Grant these permissions to the **project build service** identity:
-
-| Permission | Reason |
-|-----------|--------|
-| Code read | Read repository files and PR diff. |
-| Pull Request contribute | Post PR comments and threads. |
-| Contribute (branch) | Create bootstrap commits and fix branches. Required only for `/ai fix` and bootstrap. |
-
-> **Option B only:** the pipeline YAML must map `SYSTEM_ACCESSTOKEN` and the OpenAI
-> variables explicitly in the `env:` block of the `docker run` step. Option A handles
-> this inside `templates/pipeline.yml`.
+The server exposes:
+- `POST /webhook/ado` — ADO service hook receiver (returns 200 immediately, processes async)
+  The response body includes a `request_id` field. Callers may pass `X-Request-ID` or `X-Correlation-ID` to set a custom request ID; otherwise one is generated automatically.
+- `GET /health` — liveness/readiness probe for Container Apps
 
 ## Environment Variables
-
-### Set in Pipeline Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `AZURE_OPENAI_BASE_URL` | Yes | Azure OpenAI or AI Foundry base URL. Must end in `/openai/v1/`. Example: `https://myinstance.openai.azure.com/openai/v1/` |
 | `AZURE_OPENAI_DEPLOYMENT` | Yes | Model deployment name. Example: `gpt-4o` |
 | `AZURE_OPENAI_API_KEY` | No | API key. Omit to use Microsoft Entra / managed identity authentication instead. |
-
-### Injected Automatically by Azure DevOps Pipelines
-
-These are standard ADO variables. The pipeline YAML maps them to the container via `-e`:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SYSTEM_ACCESSTOKEN` | Yes | ADO access token. Must be explicitly passed via `env:` in the step. |
-| `SYSTEM_TEAMFOUNDATIONCOLLECTIONURI` | Yes | ADO organization URL. Example: `https://dev.azure.com/myorg/` |
-| `SYSTEM_TEAMPROJECT` | Yes | ADO project name. |
-| `BUILD_REPOSITORY_ID` | Yes | Repository GUID. |
-| `SYSTEM_PULLREQUEST_PULLREQUESTID` | Yes | PR ID integer. Only set when the pipeline runs as a branch policy. |
-| `BUILD_REPOSITORY_NAME` | No | Repository name. Defaults to empty string. |
-| `SYSTEM_PULLREQUEST_SOURCEBRANCH` | No | Source branch ref. Example: `refs/heads/feature/my-branch` |
-| `SYSTEM_PULLREQUEST_TARGETBRANCH` | No | Target branch ref. Example: `refs/heads/main` |
-| `SYSTEM_PULLREQUEST_ISFORK` | No | `True` when the PR comes from a fork. Fix branches and bootstrap commits are disabled for forks. |
-| `BUILD_BUILDID` | No | Build ID used in fix branch names. Defaults to `local`. |
 
 ## Configuration
 
@@ -296,45 +272,6 @@ ado-ai-pr-review local --command review --target-branch main
 
 When `AZURE_OPENAI_API_KEY` is set it takes priority and `DefaultAzureCredential` is not used.
 
-## Webhook / Container Apps
-
-The `serve` subcommand starts a FastAPI server that receives Azure DevOps service hooks and
-runs reviews automatically, without a pipeline job.
-
-### Setup
-
-1. Deploy the Docker image to Azure Container Apps with the environment variables below.
-2. In your ADO project, go to **Project Settings → Service hooks → Create subscription**.
-3. Select **Web Hooks** and configure it to trigger on:
-   - *Pull request created*
-   - *Pull request updated*
-   - *Pull request commented on*
-4. Set the webhook URL to `https://<your-container-app>/webhook/ado`.
-5. Set the HTTP header `ADO_AUTH_TOKEN` via the service hook basic auth or a custom header
-   (see `docs/follow-ups/webhook-auth.md` for authentication options and current limitations).
-
-### Additional Environment Variable (webhook mode only)
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ADO_AUTH_TOKEN` | Yes | Personal access token or managed identity token for ADO REST API calls from the webhook server. |
-
-The `AZURE_OPENAI_*` variables listed above are also required in webhook mode.
-
-### Running locally
-
-```bash
-export ADO_AUTH_TOKEN=...
-export AZURE_OPENAI_BASE_URL=https://...openai.azure.com/openai/v1/
-export AZURE_OPENAI_DEPLOYMENT=gpt-4o
-ado-ai-pr-review serve --host 0.0.0.0 --port 8080
-```
-
-The server exposes:
-- `POST /webhook/ado` — ADO service hook receiver (returns 200 immediately, processes async)
-  The response body includes a `request_id` field. Callers may pass `X-Request-ID` or `X-Correlation-ID` to set a custom request ID; otherwise one is generated automatically.
-- `GET /health` — liveness/readiness probe for Container Apps
-
 ## Security Boundary
 
 The model never receives a raw shell tool. Every write action (git push, PR comment) is
@@ -354,17 +291,4 @@ pip install -e ".[dev]"
 pytest
 ruff check src tests
 mypy src
-```
-
-To run the pipeline adapter locally against a real PR (read-only, no writes):
-
-```bash
-export SYSTEM_ACCESSTOKEN=...
-export SYSTEM_TEAMFOUNDATIONCOLLECTIONURI=https://dev.azure.com/myorg/
-export SYSTEM_TEAMPROJECT=myproject
-export BUILD_REPOSITORY_ID=...
-export SYSTEM_PULLREQUEST_PULLREQUESTID=123
-export AZURE_OPENAI_BASE_URL=https://...openai.azure.com/openai/v1/
-export AZURE_OPENAI_DEPLOYMENT=gpt-4o
-ado-ai-pr-review pipeline --repo-root . --dry-run
 ```
