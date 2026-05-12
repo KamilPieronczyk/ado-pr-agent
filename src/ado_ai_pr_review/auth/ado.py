@@ -27,13 +27,15 @@ class EntraAdoAuthStrategy:
         return self._credential.get_token(AZURE_DEVOPS_SCOPE).token
 
     def authorization_header(self) -> tuple[str, str]:
-        return ("Authorization", f"Bearer {self._token()}")
+        token = self._token()
+        return ("Authorization", f"Bearer {token}")
 
     def git_env(self) -> dict[str, str]:
+        token = self._token()
         return {
             "GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "http.extraheader",
-            "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: bearer {self._token()}",
+            "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: bearer {token}",
         }
 
     def secret_values(self) -> tuple[str, ...]:
@@ -44,22 +46,23 @@ class PatAdoAuthStrategy:
     def __init__(self, token: str) -> None:
         if not token.strip():
             raise ConfigurationError("ADO_PAT must be set when ADO_AUTH_MODE=pat")
-        self._token = token.strip()
+        self._pat = token.strip()
+
+    def _encoded_credential(self) -> str:
+        return base64.b64encode(f":{self._pat}".encode("utf-8")).decode("ascii")
 
     def authorization_header(self) -> tuple[str, str]:
-        encoded = base64.b64encode(f":{self._token}".encode("utf-8")).decode("ascii")
-        return ("Authorization", f"Basic {encoded}")
+        return ("Authorization", f"Basic {self._encoded_credential()}")
 
     def git_env(self) -> dict[str, str]:
-        encoded = self.authorization_header()[1].removeprefix("Basic ")
         return {
             "GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "http.extraheader",
-            "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {encoded}",
+            "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {self._encoded_credential()}",
         }
 
     def secret_values(self) -> tuple[str, ...]:
-        return (self._token,)
+        return (self._pat,)
 
 
 def build_ado_auth_strategy(env: Mapping[str, str] | None = None, credential: TokenCredential | None = None) -> AdoAuthStrategy:

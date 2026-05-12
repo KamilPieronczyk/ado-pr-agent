@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 import pytest
 
 from ado_ai_pr_review.auth.ado import EntraAdoAuthStrategy, PatAdoAuthStrategy, build_ado_auth_strategy
@@ -22,13 +24,15 @@ def test_default_auth_strategy_is_entra() -> None:
     assert isinstance(strategy, EntraAdoAuthStrategy)
     assert strategy.authorization_header() == ("Authorization", "Bearer entra-token")
     assert strategy.git_env()["GIT_CONFIG_VALUE_0"] == "AUTHORIZATION: bearer entra-token"
+    assert strategy.secret_values() == ("entra-token",)
 
 
 def test_pat_requires_explicit_mode() -> None:
     strategy = build_ado_auth_strategy(env={"ADO_AUTH_MODE": "pat", "ADO_PAT": "pat-token"}, credential=FakeCredential())
+    expected_encoded = base64.b64encode(b":pat-token").decode()
 
     assert isinstance(strategy, PatAdoAuthStrategy)
-    assert strategy.authorization_header()[1].startswith("Basic ")
+    assert strategy.authorization_header() == ("Authorization", f"Basic {expected_encoded}")
     assert strategy.secret_values() == ("pat-token",)
 
 
