@@ -7,6 +7,7 @@ from pytest_mock import MockerFixture
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.errors import CommandExecutionError, CommandRejectedError
 from ado_ai_pr_review.tool_policy import CommandPolicy
+from ado_ai_pr_review.workspace import ProcessContext, WorkspaceBoundary
 
 
 def test_cli_runner_redacts_secret_output(mocker: MockerFixture, tmp_path: Path) -> None:
@@ -135,3 +136,33 @@ def test_cli_runner_redacts_before_capping_output(
     assert result.stdout == "xx[RE"
     assert "abc" not in result.stdout
     assert "abc12" not in result.stdout
+
+
+def test_cli_runner_uses_process_context_env_and_cwd(mocker: MockerFixture, tmp_path: Path) -> None:
+    completed = subprocess.CompletedProcess(args=["git", "status"], returncode=0, stdout="", stderr="")
+    run = mocker.patch("subprocess.run", return_value=completed)
+    process = ProcessContext(
+        workspace=WorkspaceBoundary(tmp_path),
+        request_id="req-99",
+        base_env={"PATH": "/bin"},
+    )
+    runner = CliRunner(policy=CommandPolicy.default(), process_context=process)
+
+    runner.run(["git", "status"], cwd=tmp_path, env={"CUSTOM": "yes"})
+
+    kwargs = run.call_args.kwargs
+    assert kwargs["cwd"] == tmp_path.resolve()
+    assert kwargs["env"]["PATH"] == "/bin"
+    assert kwargs["env"]["CUSTOM"] == "yes"
+    assert kwargs["env"]["ADO_AI_REQUEST_ID"] == "req-99"
+
+
+def test_cli_runner_rejects_cwd_outside_process_workspace(mocker: MockerFixture, tmp_path: Path) -> None:
+    run = mocker.patch("subprocess.run")
+    process = ProcessContext(workspace=WorkspaceBoundary(tmp_path), request_id="req-99", base_env={})
+    runner = CliRunner(policy=CommandPolicy.default(), process_context=process)
+
+    with pytest.raises(CommandExecutionError, match="cwd outside workspace"):
+        runner.run(["git", "status"], cwd=tmp_path.parent)
+
+    run.assert_not_called()

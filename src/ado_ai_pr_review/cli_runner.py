@@ -9,6 +9,7 @@ from shlex import join as shell_join
 from ado_ai_pr_review.errors import CommandExecutionError
 from ado_ai_pr_review.redaction import SecretRedactor
 from ado_ai_pr_review.tool_policy import CommandPolicy
+from ado_ai_pr_review.workspace import ProcessContext
 
 
 @dataclass(frozen=True)
@@ -26,11 +27,13 @@ class CliRunner:
         secrets: list[str] | None = None,
         timeout_seconds: int = 60,
         max_output_chars: int = 200_000,
+        process_context: ProcessContext | None = None,
     ) -> None:
         self._policy = policy
         self._redactor = SecretRedactor(secrets or ())
         self._timeout_seconds = timeout_seconds
         self._max_output_chars = max_output_chars
+        self._process_context = process_context
 
     def run(
         self,
@@ -41,10 +44,19 @@ class CliRunner:
     ) -> CommandResult:
         self._policy.validate(argv)
         try:
+            effective_cwd = self._process_context.require_cwd(cwd) if self._process_context else cwd
+            effective_env = self._process_context.build_env(env) if self._process_context else env
+        except Exception as exc:
+            detail = self._redactor.redact(str(exc))
+            if "outside workspace" in detail:
+                detail = f"cwd outside workspace: {detail}"
+            raise CommandExecutionError(detail) from exc
+
+        try:
             completed: subprocess.CompletedProcess[str] = subprocess.run(
                 argv,
-                cwd=cwd,
-                env=env,
+                cwd=effective_cwd,
+                env=effective_env,
                 check=False,
                 capture_output=True,
                 text=True,
