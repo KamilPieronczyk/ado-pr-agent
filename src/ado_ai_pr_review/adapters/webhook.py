@@ -1,27 +1,24 @@
 from __future__ import annotations
 
-import base64
 import contextlib
-import json as _json
 import logging
 import re
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ado_ai_pr_review.ado_context import AdoContext
+from ado_ai_pr_review.ado_rest import AdoRestClient
 from ado_ai_pr_review.ado_toolset import AdoToolset
+from ado_ai_pr_review.auth import AdoAuthStrategy
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.commands import CommandRouter
 from ado_ai_pr_review.fixer import MechanicalFixer
-from ado_ai_pr_review.git_clone import GitCloneService
 from ado_ai_pr_review.git_toolset import GitToolset
 from ado_ai_pr_review.models import FixCandidate, ReviewCommand, ReviewResult
 from ado_ai_pr_review.ports import PRContext, ReviewRequest
 from ado_ai_pr_review.publisher import SuggestionPublisher
-from ado_ai_pr_review.runtime import RuntimeContext
 from ado_ai_pr_review.security import SecurityScanner
 from ado_ai_pr_review.tool_policy import CommandPolicy
 
@@ -189,24 +186,27 @@ class AdoWebhookAdapter:
     def __init__(
         self,
         payload: AdoWebhookPayload,
-        auth_token: str,
+        auth_strategy: AdoAuthStrategy,
         temp_dir: Path,
-        request_id: str = "unknown",
     ) -> None:
         self._payload = payload
-        self._auth_token = auth_token
         self._temp_dir = temp_dir
-        self._request_id = request_id
 
-        self._runner = CliRunner(policy=CommandPolicy.default(), secrets=[auth_token])
+        self._runner = CliRunner(policy=CommandPolicy.default(), secrets=list(auth_strategy.secret_values()))
+        rest_client = AdoRestClient(auth=auth_strategy)
 
         # For flat-comment events the payload lacks repo/branch info; fetch via REST.
         if payload.is_flat_comment_event:
-            pr_details = self._fetch_pr_details(
-                org_url=payload.organization_url,
-                repo_id=payload.repository_id,
-                pr_id=payload.pull_request_id,
-            )
+            org = payload.organization_url.rstrip("/")
+            if payload.repository_id:
+                url = f"{org}/_apis/git/repositories/{payload.repository_id}/pullRequests/{payload.pull_request_id}?api-version=7.0"
+            else:
+                url = f"{org}/_apis/git/pullRequests/{payload.pull_request_id}?api-version=7.0"
+            try:
+                pr_details = cast(dict[str, Any], rest_client.request_json(method="GET", url=url))
+            except Exception:
+                logger.error("Failed to fetch PR details")
+                pr_details = {}
         else:
             pr_details = {}
 
@@ -219,11 +219,16 @@ class AdoWebhookAdapter:
         self._project_name = payload.project_name or repo_info.get("project", {}).get("name", "")
 
         # Clone the repo branch into temp_dir
-        authenticated_url = self._make_authenticated_url(self._remote_url)
         source_branch = self._source_ref.removeprefix("refs/heads/")
-        GitCloneService(self._runner).clone_branch(authenticated_url, source_branch, temp_dir)
+        self._git = GitToolset(runner=self._runner, repo_root=temp_dir)
+        self._git.clone(
+            remote_url=self._remote_url,
+            branch=source_branch,
+            destination=temp_dir,
+            auth_strategy=auth_strategy,
+        )
 
-        self._context = RuntimeContext(
+        context = AdoContext(
             repo_root=temp_dir,
             organization_url=payload.organization_url,
             project=self._project_name,
@@ -233,11 +238,9 @@ class AdoWebhookAdapter:
             source_branch=self._source_ref,
             target_branch=self._target_ref,
             is_fork=False,
-            build_id="webhook",
-            system_access_token=auth_token,
+            run_id="webhook",
         )
-        self._ado = AdoToolset(runner=self._runner, context=self._context)
-        self._git = GitToolset(runner=self._runner, repo_root=temp_dir)
+        self._ado = AdoToolset(rest_client=rest_client, context=context)
         self._publisher = SuggestionPublisher(ado_toolset=self._ado)
 
     def load_request(self) -> ReviewRequest:
@@ -316,31 +319,4 @@ class AdoWebhookAdapter:
             target_branch=self._target_ref,
             is_fork=False,
             run_id="webhook",
-            request_id=self._request_id,
         )
-
-    def _fetch_pr_details(self, org_url: str, repo_id: str, pr_id: int) -> dict[str, Any]:
-        """Fetch PR details from ADO REST API (used for flat-comment event payloads)."""
-        org = org_url.rstrip("/")
-        if repo_id:
-            url = f"{org}/_apis/git/repositories/{repo_id}/pullRequests/{pr_id}?api-version=7.0"
-        else:
-            url = f"{org}/_apis/git/pullRequests/{pr_id}?api-version=7.0"
-        credentials = base64.b64encode(f":{self._auth_token}".encode()).decode()
-        req = urllib.request.Request(url, headers={"Authorization": f"Basic {credentials}"})
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return cast(dict[str, Any], _json.loads(resp.read().decode()))
-        except urllib.error.URLError as exc:
-            logger.error("Failed to fetch PR details from ADO API: %s", exc)
-            return {}
-
-    def _make_authenticated_url(self, url: str) -> str:
-        if url.startswith("https://"):
-            # ADO remote URLs often contain the org name as a username
-            # (e.g. https://OrgName@dev.azure.com/...). Strip it before
-            # inserting the PAT to avoid an invalid double-@ URL.
-            if "@" in url[len("https://"):]:
-                url = "https://" + url.split("@", 1)[1]
-            return url.replace("https://", f"https://:{self._auth_token}@", 1)
-        return url

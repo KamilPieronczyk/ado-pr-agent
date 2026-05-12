@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
+from pytest_mock import MockerFixture
 
-from ado_ai_pr_review.adapters.webhook import AdoWebhookPayload
+from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter, AdoWebhookPayload
 
 _PR_CREATED_PAYLOAD = {
     "eventType": "git.pullrequest.created",
@@ -71,3 +73,36 @@ def test_payload_rejects_missing_pull_request_id() -> None:
     broken = {**_PR_CREATED_PAYLOAD, "resource": {"repository": resource["repository"]}}
     with pytest.raises(ValidationError):
         AdoWebhookPayload.model_validate(broken)
+
+
+class FakeAuth:
+    def authorization_header(self) -> tuple[str, str]:
+        return ("Authorization", "Bearer entra-token")
+
+    def git_env(self) -> dict[str, str]:
+        return {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "http.extraheader",
+            "GIT_CONFIG_VALUE_0": "AUTHORIZATION: bearer entra-token",
+        }
+
+    def secret_values(self) -> tuple[str, ...]:
+        return ("entra-token",)
+
+
+def test_webhook_adapter_clones_with_auth_strategy_not_url_token(mocker: MockerFixture, tmp_path: Path) -> None:
+    payload = AdoWebhookPayload.model_validate(_PR_CREATED_PAYLOAD)
+    runner_cls = mocker.patch("ado_ai_pr_review.adapters.webhook.CliRunner")
+    git_cls = mocker.patch("ado_ai_pr_review.adapters.webhook.GitToolset")
+    mocker.patch("ado_ai_pr_review.adapters.webhook.AdoToolset")
+    mocker.patch("ado_ai_pr_review.adapters.webhook.AdoRestClient")
+    mocker.patch("ado_ai_pr_review.adapters.webhook.SuggestionPublisher")
+
+    AdoWebhookAdapter(payload=payload, auth_strategy=FakeAuth(), temp_dir=tmp_path)
+
+    runner_cls.assert_called_once()
+    assert runner_cls.call_args.kwargs["secrets"] == ["entra-token"]
+    git_cls.return_value.clone.assert_called_once()
+    clone_kwargs = git_cls.return_value.clone.call_args.kwargs
+    assert clone_kwargs["remote_url"] == "https://dev.azure.com/org/project/_git/MyRepo"
+    assert "entra-token" not in clone_kwargs["remote_url"]

@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter, AdoWebhookPayload
+from ado_ai_pr_review.auth import build_ado_auth_strategy
 from ado_ai_pr_review.engine import ReviewEngine
 from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
 from ado_ai_pr_review.log_context import bind_request_context
@@ -102,29 +103,27 @@ async def health() -> dict[str, str]:
 @app.post("/webhook/ado")
 async def handle_ado_webhook(payload: AdoWebhookPayload, request: Request) -> dict[str, str]:
     _verify_basic_auth(request)
-    auth_token = os.getenv("ADO_AUTH_TOKEN")
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="ADO_AUTH_TOKEN not configured")
     request_id = (
         request.headers.get("X-Request-ID")
         or request.headers.get("X-Correlation-ID")
         or f"ado-pr-{payload.pull_request_id}-{secrets.token_hex(8)}"
     )
-    task = asyncio.create_task(asyncio.to_thread(_process_sync, payload, auth_token, request_id))
+    task = asyncio.create_task(asyncio.to_thread(_process_sync, payload, request_id))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return {"status": "accepted", "request_id": request_id}
 
 
-def _process_sync(payload: AdoWebhookPayload, auth_token: str, request_id: str) -> None:
+def _process_sync(payload: AdoWebhookPayload, request_id: str) -> None:
     with bind_request_context(request_id), tempfile.TemporaryDirectory() as tmp:
-            temp_dir = Path(tmp)
-            try:
-                adapter = AdoWebhookAdapter(
-                    payload=payload, auth_token=auth_token, temp_dir=temp_dir, request_id=request_id
-                )
-                model = _build_model()
-                engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
-                engine.run()
-            except Exception:
-                logger.exception("webhook processing failed for PR %s", payload.pull_request_id)
+        temp_dir = Path(tmp)
+        try:
+            auth_strategy = build_ado_auth_strategy()
+            adapter = AdoWebhookAdapter(
+                payload=payload, auth_strategy=auth_strategy, temp_dir=temp_dir
+            )
+            model = _build_model()
+            engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
+            engine.run()
+        except Exception:
+            logger.exception("webhook processing failed for PR %s", payload.pull_request_id)

@@ -33,7 +33,6 @@ def test_health_returns_ok() -> None:
 
 
 def test_webhook_returns_accepted_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
     monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
 
@@ -47,18 +46,11 @@ def test_webhook_returns_accepted_immediately(monkeypatch: pytest.MonkeyPatch) -
     assert body["request_id"]
 
 
-def test_webhook_returns_400_on_invalid_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
+def test_webhook_returns_400_on_invalid_payload() -> None:
     client = TestClient(app)
     response = client.post("/webhook/ado", json={"eventType": "unknown", "resource": {}, "resourceContainers": {"collection": {"baseUrl": "https://example.com/"}}})
     assert response.status_code == 422
 
-
-def test_webhook_returns_401_without_auth_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("ADO_AUTH_TOKEN", raising=False)
-    client = TestClient(app)
-    response = client.post("/webhook/ado", json=_PR_CREATED_PAYLOAD)
-    assert response.status_code == 401
 
 
 def _basic_auth_header(username: str, password: str) -> str:
@@ -68,7 +60,6 @@ def _basic_auth_header(username: str, password: str) -> str:
 
 def test_webhook_auth_skipped_when_env_vars_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
     """No WEBHOOK_USERNAME/PASSWORD configured → endpoint passes through (gradual rollout)."""
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
     monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
     monkeypatch.delenv("WEBHOOK_USERNAME", raising=False)
@@ -82,7 +73,6 @@ def test_webhook_auth_skipped_when_env_vars_not_set(monkeypatch: pytest.MonkeyPa
 
 
 def test_webhook_auth_accepted_with_correct_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
     monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
     monkeypatch.setenv("WEBHOOK_USERNAME", "ado-ai")
@@ -100,7 +90,6 @@ def test_webhook_auth_accepted_with_correct_credentials(monkeypatch: pytest.Monk
 
 
 def test_webhook_auth_rejected_when_header_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("WEBHOOK_USERNAME", "ado-ai")
     monkeypatch.setenv("WEBHOOK_PASSWORD", "s3cr3t")
 
@@ -111,7 +100,6 @@ def test_webhook_auth_rejected_when_header_missing(monkeypatch: pytest.MonkeyPat
 
 
 def test_webhook_auth_rejected_with_wrong_password(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("WEBHOOK_USERNAME", "ado-ai")
     monkeypatch.setenv("WEBHOOK_PASSWORD", "s3cr3t")
 
@@ -126,7 +114,6 @@ def test_webhook_auth_rejected_with_wrong_password(monkeypatch: pytest.MonkeyPat
 
 
 def test_webhook_auth_rejected_with_wrong_username(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("WEBHOOK_USERNAME", "ado-ai")
     monkeypatch.setenv("WEBHOOK_PASSWORD", "s3cr3t")
 
@@ -141,7 +128,6 @@ def test_webhook_auth_rejected_with_wrong_username(monkeypatch: pytest.MonkeyPat
 
 
 def test_webhook_auth_rejected_with_malformed_base64(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("WEBHOOK_USERNAME", "ado-ai")
     monkeypatch.setenv("WEBHOOK_PASSWORD", "s3cr3t")
 
@@ -157,7 +143,6 @@ def test_webhook_auth_rejected_with_malformed_base64(monkeypatch: pytest.MonkeyP
 
 def test_webhook_auth_accepted_with_colon_in_password(monkeypatch: pytest.MonkeyPatch) -> None:
     """partition(':') handles passwords that contain colons."""
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
     monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
     monkeypatch.setenv("WEBHOOK_USERNAME", "user")
@@ -175,7 +160,6 @@ def test_webhook_auth_accepted_with_colon_in_password(monkeypatch: pytest.Monkey
 
 
 def test_webhook_returns_and_passes_request_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
     monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
     monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
 
@@ -185,4 +169,18 @@ def test_webhook_returns_and_passes_request_id(monkeypatch: pytest.MonkeyPatch) 
 
     assert response.status_code == 200
     assert response.json() == {"status": "accepted", "request_id": "external-req-1"}
-    assert process.call_args.args[2] == "external-req-1"
+    assert process.call_args.args[1] == "external-req-1"
+
+
+def test_webhook_no_longer_requires_ado_auth_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ADO_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("ADO_AUTH_MODE", raising=False)
+    monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
+
+    with patch("ado_ai_pr_review.webhook_server._process_sync"):
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post("/webhook/ado", json=_PR_CREATED_PAYLOAD)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
