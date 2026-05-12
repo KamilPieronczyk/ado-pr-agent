@@ -37,3 +37,25 @@ def test_review_metrics_serializes_without_code_context() -> None:
 
     assert payload["command"] == "review"
     assert "code_context" not in payload
+
+
+def test_orchestrator_fix_plan_calls_fix_plan_json(mocker: MockerFixture) -> None:
+    from ado_ai_pr_review.models import FixPlanResult
+
+    model_client = mocker.Mock()
+    model_client.fix_plan_json.return_value = FixPlanResult(summary="one fix")
+    orchestrator = ReviewOrchestrator(model_client=model_client)
+
+    result = orchestrator.fix_plan(
+        guidance=["No secrets."],
+        selected_files=["src/store.ts\ncode"],
+        diff_text="+ const x = 1;",
+        local_security_summary="Local findings: 0",
+    )
+
+    assert result.summary == "one fix"
+    call_kwargs = model_client.fix_plan_json.call_args.kwargs
+    assert "+ const x = 1;" in call_kwargs["user_prompt"]
+    assert "No secrets." in call_kwargs["user_prompt"]
+    assert "inline_suggestions" in call_kwargs["system_prompt"]
+    assert "fix_branch_changes" in call_kwargs["system_prompt"]

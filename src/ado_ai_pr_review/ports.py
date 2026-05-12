@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ado_ai_pr_review.models import Finding, FixCandidate, ReviewCommand, ReviewResult
+from ado_ai_pr_review.models import Finding, FixCandidate, FixPlanResult, ReviewCommand, ReviewResult
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,7 @@ class PlatformAdapter(Protocol):
 @runtime_checkable
 class LLMPort(Protocol):
     def review_json(self, system_prompt: str, user_prompt: str) -> ReviewResult: ...
+    def fix_plan_json(self, system_prompt: str, user_prompt: str) -> FixPlanResult: ...
 
 
 @runtime_checkable
