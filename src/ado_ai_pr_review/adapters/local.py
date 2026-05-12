@@ -9,7 +9,7 @@ import typer
 
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.git_toolset import GitToolset
-from ado_ai_pr_review.models import FixCandidate, ReviewCommand, ReviewResult
+from ado_ai_pr_review.models import FixCandidate, FixPlanResult, ReviewCommand, ReviewResult
 from ado_ai_pr_review.ports import PRContext, ReviewRequest
 from ado_ai_pr_review.security import SecurityScanner
 from ado_ai_pr_review.tool_policy import CommandPolicy
@@ -90,6 +90,15 @@ class LocalCliAdapter:
             typer.echo(finding.body)
             if finding.suggested_code:
                 typer.echo(f"Suggestion:\n{finding.suggested_code}")
+
+    def publish_fix_result(self, result: FixPlanResult) -> None:
+        typer.echo(f"\n=== AI Fix Summary ===\n{result.summary}")
+        for s in result.inline_suggestions:
+            typer.echo(f"\n[INLINE SUGGESTION] {s.title} ({s.file_path}:{s.line_start}-{s.line_end})")
+            typer.echo(s.body)
+            typer.echo(f"Replacement:\n{s.replacement_lines}")
+        if result.fix_branch_changes:
+            typer.echo(f"\n{len(result.fix_branch_changes)} fix branch change(s) will be applied to a branch.")
 
     def publish_error(self, exc: BaseException) -> None:
         typer.echo(f"Error: {exc}", err=True)

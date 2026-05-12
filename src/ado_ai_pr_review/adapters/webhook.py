@@ -13,7 +13,8 @@ from ado_ai_pr_review.auth import AdoAuthStrategy
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.commands import CommandRouter
 from ado_ai_pr_review.git_toolset import GitToolset
-from ado_ai_pr_review.models import FixCandidate, ReviewCommand, ReviewResult
+from ado_ai_pr_review.models import FixCandidate, FixPlanResult, ReviewCommand, ReviewResult
+from ado_ai_pr_review.publisher import _BOT_MARKER
 from ado_ai_pr_review.ports import PRContext, ReviewRequest
 from ado_ai_pr_review.publisher import SuggestionPublisher
 from ado_ai_pr_review.security import SecurityScanner
@@ -138,6 +139,10 @@ class AdoWebhookAdapter:
         if self._publisher is not None:
             self._publisher.publish_review(result)
 
+    def publish_fix_result(self, result: FixPlanResult) -> None:
+        if self._publisher is not None:
+            self._publisher.publish_fix_result(result)
+
     def publish_error(self, exc: BaseException) -> None:
         logger.error("webhook review failed: %s", exc, exc_info=True)
         if self._ado is not None:
@@ -145,7 +150,7 @@ class AdoWebhookAdapter:
                 self._ado.create_pr_thread(body={
                     "comments": [{
                         "parentCommentId": 0,
-                        "content": f"ADO AI review failed: {type(exc).__name__}. Check webhook logs for details.",
+                        "content": f"ADO AI review failed: {type(exc).__name__}. Check webhook logs for details.\n\n{_BOT_MARKER}",
                         "commentType": "text",
                     }],
                     "status": "active",
