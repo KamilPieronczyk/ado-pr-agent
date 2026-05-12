@@ -176,6 +176,14 @@ def test_engine_delegates_fix_branch_to_platform(tmp_path: Path) -> None:
     assert platform.fix_branch_args is not None
 
 
+def test_review_result_is_value_object() -> None:
+    from ado_ai_pr_review.models import ReviewResult
+
+    r = ReviewResult(summary="ok", findings=[])
+    with pytest.raises(Exception):
+        r.findings = []  # frozen model must reject attribute assignment
+
+
 def _write_config(root: Path) -> None:
     from ado_ai_pr_review.bootstrap import Bootstrapper
 

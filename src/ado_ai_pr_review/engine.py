@@ -13,6 +13,7 @@ from ado_ai_pr_review.models import (
     FixCandidate,
     FixDelivery,
     ReviewCommand,
+    ReviewResult,
     SelectedContext,
 )
 from ado_ai_pr_review.observability import ReviewMetrics
@@ -95,8 +96,11 @@ class ReviewEngine:
                 self._platform.publish_error(exc)
                 raise
 
-            result.findings.extend(request.local_findings)
-            self._platform.publish_review(result)
+            merged = ReviewResult(
+                summary=result.summary,
+                findings=[*result.findings, *request.local_findings],
+            )
+            self._platform.publish_review(merged)
 
             metrics = ReviewMetrics(
                 command=request.command.value,
@@ -117,7 +121,10 @@ class ReviewEngine:
                 diff_text=request.diff_text,
                 local_security_summary=local_security_summary,
             )
-            result.findings.extend(request.local_findings)
+            result = ReviewResult(
+                summary=result.summary,
+                findings=[*result.findings, *request.local_findings],
+            )
 
             fix_candidates = [
                 FixCandidate(
