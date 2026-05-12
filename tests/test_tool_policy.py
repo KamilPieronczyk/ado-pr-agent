@@ -214,3 +214,30 @@ def test_command_policy_allows_narrow_command_shapes(argv: list[str]) -> None:
 def test_command_policy_rejects_unsafe_or_unplanned_shapes(argv: list[str]) -> None:
     with pytest.raises(CommandRejectedError, match="Command shape is not allowlisted"):
         CommandPolicy.default().validate(argv)
+
+
+def test_command_policy_allows_plain_https_git_clone() -> None:
+    CommandPolicy.default().validate([
+        "git",
+        "clone",
+        "--depth",
+        "50",
+        "--branch",
+        "feature/auth",
+        "https://dev.azure.com/acme/Payments/_git/payments-api",
+        "/tmp/work",
+    ])
+
+
+def test_command_policy_rejects_credential_embedded_clone_url() -> None:
+    with pytest.raises(CommandRejectedError):
+        CommandPolicy.default().validate([
+            "git",
+            "clone",
+            "--depth",
+            "50",
+            "--branch",
+            "feature/auth",
+            "https://:secret@dev.azure.com/acme/Payments/_git/payments-api",
+            "/tmp/work",
+        ])

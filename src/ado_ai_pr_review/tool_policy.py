@@ -110,12 +110,16 @@ class CommandPolicy:
             return _is_safe_ref_or_range(argv[2])
         if len(argv) == 4 and _matches_shape(argv, ("git", "push")):
             return _is_safe_remote(argv[2]) and _is_safe_branch(argv[3])
-        return (
-            len(argv) >= 7
-            and _matches_shape(argv, ("git", "clone", "--depth"))
-            and argv[3].isdigit()
-            and argv[4] == "--branch"
-        )
+        if len(argv) == 8 and _matches_shape(argv, ("git", "clone", "--depth")):
+            return (
+                argv[3].isdigit()
+                and argv[4] == "--branch"
+                and _is_safe_branch(argv[5])
+                and argv[6].startswith("https://dev.azure.com/")
+                and "@" not in argv[6]
+                and _is_safe_local_path(argv[7])
+            )
+        return False
 
     def _is_allowed_gh(self, argv: list[str]) -> bool:
         return _matches_exact(argv, ("gh", "auth", "token"))

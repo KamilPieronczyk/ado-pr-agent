@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ado_ai_pr_review.cli_runner import CliRunner, CommandResult
+
+if TYPE_CHECKING:
+    from ado_ai_pr_review.auth import AdoAuthStrategy
 
 
 class GitToolset:
@@ -41,3 +46,19 @@ class GitToolset:
 
     def push(self, remote: str, branch: str) -> CommandResult:
         return self._runner.run(["git", "push", remote, branch], cwd=self._repo_root)
+
+    def clone(
+        self,
+        *,
+        remote_url: str,
+        branch: str,
+        destination: Path,
+        auth_strategy: "AdoAuthStrategy",
+        depth: int = 50,
+    ) -> CommandResult:
+        env = {**os.environ, **auth_strategy.git_env()}
+        return self._runner.run(
+            ["git", "clone", "--depth", str(depth), "--branch", branch, remote_url, str(destination)],
+            cwd=destination.parent,
+            env=env,
+        )
