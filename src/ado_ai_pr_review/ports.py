@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from ado_ai_pr_review.models import Finding, FixCandidate, ReviewCommand, ReviewResult
 
@@ -26,6 +27,7 @@ class ReviewRequest:
     pr_context: PRContext
 
 
+@runtime_checkable
 class PlatformAdapter(Protocol):
     def load_request(self) -> ReviewRequest: ...
     def publish_onboarding(self) -> None: ...
@@ -39,5 +41,25 @@ class PlatformAdapter(Protocol):
     ) -> bool: ...
 
 
+@runtime_checkable
 class LLMPort(Protocol):
     def review_json(self, system_prompt: str, user_prompt: str) -> ReviewResult: ...
+
+
+@runtime_checkable
+class GitPort(Protocol):
+    def checkout_new_branch(self, branch: str) -> object: ...
+    def add(self, paths: Sequence[str]) -> object: ...
+    def commit(self, message: str) -> str: ...
+    def push(self, remote: str, branch: str) -> object: ...
+
+
+@runtime_checkable
+class AdoApiPort(Protocol):
+    def create_pr(
+        self,
+        source_branch: str,
+        target_branch: str,
+        title: str,
+        description: str,
+    ) -> object: ...

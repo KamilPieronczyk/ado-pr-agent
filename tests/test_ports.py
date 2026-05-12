@@ -71,3 +71,20 @@ def test_pr_context_uses_run_id_not_build_id() -> None:
 
     assert ctx.run_id == "webhook"
     assert not hasattr(ctx, "build_id")
+
+
+def test_git_toolset_satisfies_git_port() -> None:
+    from ado_ai_pr_review.git_toolset import GitToolset
+    from ado_ai_pr_review.ports import GitPort
+    from unittest.mock import MagicMock
+
+    # Runtime structural subtype check via Protocol
+    assert isinstance(GitToolset(runner=MagicMock(), repo_root=Path(".")), GitPort)
+
+
+def test_ado_toolset_satisfies_ado_api_port() -> None:
+    from ado_ai_pr_review.ado_toolset import AdoToolset
+    from ado_ai_pr_review.ports import AdoApiPort
+    from unittest.mock import MagicMock
+
+    assert isinstance(AdoToolset(rest_client=MagicMock(), context=MagicMock()), AdoApiPort)

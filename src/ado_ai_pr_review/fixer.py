@@ -3,10 +3,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ado_ai_pr_review.ado_toolset import AdoToolset
 from ado_ai_pr_review.errors import WorkspaceBoundaryError
-from ado_ai_pr_review.git_toolset import GitToolset
 from ado_ai_pr_review.models import FixCandidate, FixDelivery
+from ado_ai_pr_review.ports import AdoApiPort, GitPort
 from ado_ai_pr_review.workspace import WorkspaceBoundary
 
 logger = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ MECHANICAL_WORDS = {
 
 
 class MechanicalFixer:
-    def __init__(self, git_toolset: GitToolset | None, ado_toolset: AdoToolset | None, repo_root: Path | None = None) -> None:
+    def __init__(self, git_toolset: GitPort | None, ado_toolset: AdoApiPort | None, repo_root: Path | None = None) -> None:
         self._git = git_toolset
         self._ado = ado_toolset
         self._repo_root = repo_root
