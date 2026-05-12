@@ -17,27 +17,13 @@ from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter
 from ado_ai_pr_review.adapters.webhook_payload import AdoWebhookPayload
 from ado_ai_pr_review.auth import build_ado_auth_strategy
 from ado_ai_pr_review.engine import ReviewEngine
-from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
+from ado_ai_pr_review.llm.factory import build_llm
 from ado_ai_pr_review.log_context import bind_request_context
-from ado_ai_pr_review.ports import LLMPort
 
 logger = logging.getLogger(__name__)
 
 _background_tasks: set[asyncio.Task[None]] = set()
 
-
-def _build_model() -> LLMPort:
-    if os.getenv("LLM_PROVIDER") == "copilot":
-        from ado_ai_pr_review.cli_runner import CliRunner
-        from ado_ai_pr_review.llm.github_copilot import GitHubCopilotClient
-        from ado_ai_pr_review.tool_policy import CommandPolicy
-
-        runner = CliRunner(policy=CommandPolicy.default())
-        return GitHubCopilotClient(runner=runner)
-    return ModelClient(
-        openai_client=build_openai_client(),  # type: ignore[arg-type]
-        deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    )
 
 app = FastAPI(title="ADO AI PR Review Webhook")
 
@@ -123,7 +109,7 @@ def _process_sync(payload: AdoWebhookPayload, request_id: str) -> None:
             adapter = AdoWebhookAdapter(
                 payload=payload, auth_strategy=auth_strategy, temp_dir=temp_dir, request_id=request_id
             )
-            model = _build_model()
+            model = build_llm(os.getenv("LLM_PROVIDER"))
             engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
             engine.run()
         except Exception:

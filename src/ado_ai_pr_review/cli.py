@@ -10,10 +10,9 @@ import typer
 
 from ado_ai_pr_review.adapters.local import LocalCliAdapter
 from ado_ai_pr_review.engine import ReviewEngine
-from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
+from ado_ai_pr_review.llm.factory import build_llm
 from ado_ai_pr_review.logging_config import configure_logging
 from ado_ai_pr_review.models import ReviewCommand
-from ado_ai_pr_review.ports import LLMPort
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ def local(
     root = Path(repo_root).resolve()
     request_id = f"local-{secrets.token_hex(8)}"
     adapter = LocalCliAdapter(repo_root=root, command=command, target_branch=target_branch, request_id=request_id)
-    model = _build_model(llm)
+    model = build_llm(llm)
     engine = ReviewEngine(platform=adapter, model=model, repo_root=root)
     try:
         engine.run()
@@ -56,17 +55,3 @@ def serve(
     uvicorn.run(_ws.app, host=host, port=port)
 
 
-def _build_model(llm: str) -> LLMPort:
-    if llm == "copilot":
-        try:
-            from ado_ai_pr_review.cli_runner import CliRunner
-            from ado_ai_pr_review.llm.github_copilot import GitHubCopilotClient
-            from ado_ai_pr_review.tool_policy import CommandPolicy
-            runner = CliRunner(policy=CommandPolicy.default())
-            return GitHubCopilotClient(runner=runner)
-        except ImportError as exc:
-            raise typer.BadParameter("--llm copilot requires llm/github_copilot.py (Task 9)") from exc
-    return ModelClient(
-        openai_client=build_openai_client(),  # type: ignore[arg-type]
-        deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    )

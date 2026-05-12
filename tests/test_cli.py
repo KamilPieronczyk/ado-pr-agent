@@ -40,7 +40,7 @@ def test_local_runs_engine(mocker: MockerFixture, tmp_path: Path) -> None:
         "AZURE_OPENAI_DEPLOYMENT": "model",
     })
     mocker.patch("ado_ai_pr_review.cli.LocalCliAdapter")
-    mocker.patch("ado_ai_pr_review.cli.build_openai_client")
+    mocker.patch("ado_ai_pr_review.llm.factory.build_openai_client")
     engine_mock = mocker.patch("ado_ai_pr_review.cli.ReviewEngine")
     engine_mock.return_value.run.return_value = ReviewCommand.REVIEW
 
