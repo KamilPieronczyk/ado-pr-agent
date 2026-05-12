@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from ado_ai_pr_review.adapters.webhook import AdoWebhookAdapter, AdoWebhookPayload
 from ado_ai_pr_review.engine import ReviewEngine
 from ado_ai_pr_review.llm.azure_openai import ModelClient, build_openai_client
+from ado_ai_pr_review.log_context import bind_request_context
 from ado_ai_pr_review.ports import LLMPort
 
 logger = logging.getLogger(__name__)
@@ -38,15 +39,28 @@ def _build_model() -> LLMPort:
 app = FastAPI(title="ADO AI PR Review Webhook")
 
 
+def _sanitize_errors(errors: list[dict]) -> list[dict]:
+    """Strip non-serializable values (e.g. exception objects) from Pydantic error ctx dicts."""
+    sanitized = []
+    for err in errors:
+        clean = {k: v for k, v in err.items() if k != "ctx"}
+        ctx = err.get("ctx")
+        if ctx:
+            clean["ctx"] = {ck: str(cv) for ck, cv in ctx.items()}
+        sanitized.append(clean)
+    return sanitized
+
+
 @app.exception_handler(RequestValidationError)
 async def _log_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     body = await request.body()
+    errors = exc.errors()
     logger.error(
         "Webhook payload validation failed: %s | body=%.2000s",
-        exc.errors(),
+        errors,
         body.decode("utf-8", errors="replace"),
     )
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    return JSONResponse(status_code=422, content={"detail": _sanitize_errors(errors)})
 
 
 def _verify_basic_auth(request: Request) -> None:
@@ -90,19 +104,27 @@ async def handle_ado_webhook(payload: AdoWebhookPayload, request: Request) -> di
     auth_token = os.getenv("ADO_AUTH_TOKEN")
     if not auth_token:
         raise HTTPException(status_code=401, detail="ADO_AUTH_TOKEN not configured")
-    task = asyncio.create_task(asyncio.to_thread(_process_sync, payload, auth_token))
+    request_id = (
+        request.headers.get("X-Request-ID")
+        or request.headers.get("X-Correlation-ID")
+        or f"ado-pr-{payload.pull_request_id}-{secrets.token_hex(8)}"
+    )
+    task = asyncio.create_task(asyncio.to_thread(_process_sync, payload, auth_token, request_id))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
-    return {"status": "accepted"}
+    return {"status": "accepted", "request_id": request_id}
 
 
-def _process_sync(payload: AdoWebhookPayload, auth_token: str) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        temp_dir = Path(tmp)
-        try:
-            adapter = AdoWebhookAdapter(payload=payload, auth_token=auth_token, temp_dir=temp_dir)
-            model = _build_model()
-            engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
-            engine.run()
-        except Exception:
-            logger.exception("webhook processing failed for PR %s", payload.pull_request_id)
+def _process_sync(payload: AdoWebhookPayload, auth_token: str, request_id: str) -> None:
+    with bind_request_context(request_id):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_dir = Path(tmp)
+            try:
+                adapter = AdoWebhookAdapter(
+                    payload=payload, auth_token=auth_token, temp_dir=temp_dir, request_id=request_id
+                )
+                model = _build_model()
+                engine = ReviewEngine(platform=adapter, model=model, repo_root=temp_dir)
+                engine.run()
+            except Exception:
+                logger.exception("webhook processing failed for PR %s", payload.pull_request_id)

@@ -16,6 +16,7 @@ from ado_ai_pr_review.ado_toolset import AdoToolset
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.commands import CommandRouter
 from ado_ai_pr_review.fixer import MechanicalFixer
+from ado_ai_pr_review.git_clone import GitCloneService
 from ado_ai_pr_review.git_toolset import GitToolset
 from ado_ai_pr_review.models import FixCandidate, ReviewCommand, ReviewResult
 from ado_ai_pr_review.ports import PRContext, ReviewRequest
@@ -190,10 +191,12 @@ class AdoWebhookAdapter:
         payload: AdoWebhookPayload,
         auth_token: str,
         temp_dir: Path,
+        request_id: str = "unknown",
     ) -> None:
         self._payload = payload
         self._auth_token = auth_token
         self._temp_dir = temp_dir
+        self._request_id = request_id
 
         self._runner = CliRunner(policy=CommandPolicy.default(), secrets=[auth_token])
 
@@ -218,10 +221,7 @@ class AdoWebhookAdapter:
         # Clone the repo branch into temp_dir
         authenticated_url = self._make_authenticated_url(self._remote_url)
         source_branch = self._source_ref.removeprefix("refs/heads/")
-        self._runner.run(
-            ["git", "clone", "--depth", "50", "--branch", source_branch, authenticated_url, str(temp_dir)],
-            cwd=temp_dir.parent,
-        )
+        GitCloneService(self._runner).clone_branch(authenticated_url, source_branch, temp_dir)
 
         self._context = RuntimeContext(
             repo_root=temp_dir,
@@ -316,6 +316,7 @@ class AdoWebhookAdapter:
             target_branch=self._target_ref,
             is_fork=False,
             build_id="webhook",
+            request_id=self._request_id,
         )
 
     def _fetch_pr_details(self, org_url: str, repo_id: str, pr_id: int) -> dict[str, Any]:

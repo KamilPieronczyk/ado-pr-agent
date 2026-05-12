@@ -14,6 +14,7 @@ class PRContext:
     target_branch: str
     is_fork: bool
     build_id: str
+    request_id: str = "unknown"
 
 
 @dataclass(frozen=True)

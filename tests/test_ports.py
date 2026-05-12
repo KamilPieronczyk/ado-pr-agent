@@ -51,3 +51,16 @@ def test_review_request_stores_local_findings() -> None:
     )
     assert len(req.local_findings) == 1
     assert req.local_findings[0].title == "Secret"
+
+
+def test_pr_context_carries_request_id() -> None:
+    ctx = PRContext(
+        pr_id=42,
+        source_branch="refs/heads/feature",
+        target_branch="refs/heads/main",
+        is_fork=False,
+        build_id="webhook",
+        request_id="req-42",
+    )
+
+    assert ctx.request_id == "req-42"

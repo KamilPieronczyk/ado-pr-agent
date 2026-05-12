@@ -42,7 +42,9 @@ def test_webhook_returns_accepted_immediately(monkeypatch: pytest.MonkeyPatch) -
         response = client.post("/webhook/ado", json=_PR_CREATED_PAYLOAD)
 
     assert response.status_code == 200
-    assert response.json() == {"status": "accepted"}
+    body = response.json()
+    assert body["status"] == "accepted"
+    assert body["request_id"]
 
 
 def test_webhook_returns_400_on_invalid_payload(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -170,3 +172,17 @@ def test_webhook_auth_accepted_with_colon_in_password(monkeypatch: pytest.Monkey
         )
 
     assert response.status_code == 200
+
+
+def test_webhook_returns_and_passes_request_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ADO_AUTH_TOKEN", "fake-token")
+    monkeypatch.setenv("AZURE_OPENAI_BASE_URL", "https://example.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "model")
+
+    with patch("ado_ai_pr_review.webhook_server._process_sync") as process:
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post("/webhook/ado", json=_PR_CREATED_PAYLOAD, headers={"X-Request-ID": "external-req-1"})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "accepted", "request_id": "external-req-1"}
+    assert process.call_args.args[2] == "external-req-1"
