@@ -4,6 +4,7 @@ import fnmatch
 from pathlib import Path
 
 from ado_ai_pr_review.models import RepoIndexEntry
+from ado_ai_pr_review.workspace import WorkspaceBoundary
 
 
 class RepoIndexer:
@@ -11,13 +12,10 @@ class RepoIndexer:
         self._exclude = exclude
 
     def build(self, repo_root: Path) -> list[RepoIndexEntry]:
+        workspace = WorkspaceBoundary(repo_root)
         entries: list[RepoIndexEntry] = []
-        for path in sorted(repo_root.rglob("*")):
-            if not path.is_file():
-                continue
-            relative = path.relative_to(repo_root).as_posix()
-            if self._is_excluded(relative):
-                continue
+        for relative_path in workspace.iter_relative_files(exclude=self._exclude):
+            relative = relative_path.as_posix()
             language = self._language(relative)
             if language == "unknown":
                 continue

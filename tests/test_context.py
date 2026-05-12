@@ -52,3 +52,32 @@ def test_context_selector_truncates_large_files(tmp_path: Path) -> None:
     content = selected.dynamic_files[0]
     assert "truncated" in content
     assert len(content) < 300  # well under 20k
+
+
+def test_context_selector_rejects_guidance_traversal(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "guidance.md"
+    outside.write_text("outside\n", encoding="utf-8")
+
+    selected = ContextSelector(max_files=1).select(
+        repo_root=tmp_path,
+        guidance_paths=["../guidance.md"],
+        entries=[],
+    )
+
+    assert selected.always_on_guidance == []
+    assert selected.dynamic_files == []
+
+
+def test_context_selector_skips_symlinked_dynamic_file(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside.py"
+    outside.write_text("print('secret')\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "outside.py").symlink_to(outside)
+
+    selected = ContextSelector(max_files=1).select(
+        repo_root=tmp_path,
+        guidance_paths=[],
+        entries=[RepoIndexEntry(path="src/outside.py", language="python", description="Symlink.", tags=[], relevance=90)],
+    )
+
+    assert selected.dynamic_files == []

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
+from ado_ai_pr_review.errors import WorkspaceBoundaryError
 from ado_ai_pr_review.models import RepoIndexEntry, SelectedContext
+from ado_ai_pr_review.workspace import WorkspaceBoundary
+
+logger = logging.getLogger(__name__)
 
 
 class ContextSelector:
@@ -17,11 +22,17 @@ class ContextSelector:
         entries: list[RepoIndexEntry],
         prefer_tags: set[str] | None = None,
     ) -> SelectedContext:
+        workspace = WorkspaceBoundary(repo_root)
+
         guidance = []
         for relative in guidance_paths:
-            path = repo_root / relative
-            if path.exists() and path.is_file():
-                guidance.append(path.read_text(encoding="utf-8"))
+            try:
+                content = workspace.safe_read_text(relative)
+                guidance.append(content)
+            except WorkspaceBoundaryError as exc:
+                logger.warning("Skipping guidance file outside workspace: %s (%s)", relative, exc)
+            except FileNotFoundError:
+                logger.warning("Skipping missing guidance file: %s", relative)
 
         prefer_tags = prefer_tags or set()
         ranked = sorted(
@@ -36,16 +47,21 @@ class ContextSelector:
 
         dynamic_files: list[str] = []
         for entry in ranked[: self._max_files]:
-            path = repo_root / entry.path
-            if path.exists() and path.is_file():
-                content = path.read_text(encoding="utf-8")
-                if len(content) > self._max_chars_per_file:
-                    half = self._max_chars_per_file // 2
-                    content = (
-                        content[:half]
-                        + f"\n... [truncated: {len(content)} chars total, showing first and last {half}] ...\n"
-                        + content[-half:]
-                    )
-                dynamic_files.append(f"{entry.path}\n{content}")
+            try:
+                content = workspace.safe_read_text(entry.path)
+            except WorkspaceBoundaryError as exc:
+                logger.debug("Skipping dynamic file outside workspace: %s (%s)", entry.path, exc)
+                continue
+            except FileNotFoundError:
+                logger.debug("Skipping missing dynamic file: %s", entry.path)
+                continue
+            if len(content) > self._max_chars_per_file:
+                half = self._max_chars_per_file // 2
+                content = (
+                    content[:half]
+                    + f"\n... [truncated: {len(content)} chars total, showing first and last {half}] ...\n"
+                    + content[-half:]
+                )
+            dynamic_files.append(f"{entry.path}\n{content}")
 
         return SelectedContext(always_on_guidance=guidance, dynamic_files=dynamic_files)
