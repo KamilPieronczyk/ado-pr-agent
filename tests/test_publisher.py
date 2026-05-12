@@ -35,7 +35,7 @@ def test_publisher_creates_inline_suggestion_thread(mocker: MockerFixture) -> No
     publisher.publish_review(result)
 
     body = ado.create_pr_thread.call_args.kwargs["body"]
-    assert body["threadContext"]["filePath"] == "src/app.py"
+    assert body["threadContext"]["filePath"] == "/src/app.py"
     comment = body["comments"][0]
     assert "if value is None" in comment["content"]
     assert comment["commentType"] == "codeChange"
@@ -112,7 +112,7 @@ def test_publisher_publish_fix_result_posts_summary_and_inline_suggestion(mocker
     assert summary_body["comments"][0]["commentType"] == "text"
     assert _BOT_MARKER in summary_body["comments"][0]["content"]
     suggestion_body = ado.create_pr_thread.call_args_list[1].kwargs["body"]
-    assert suggestion_body["threadContext"]["filePath"] == "src/store.ts"
+    assert suggestion_body["threadContext"]["filePath"] == "/src/store.ts"
     assert suggestion_body["threadContext"]["rightFileStart"]["line"] == 10
     assert suggestion_body["threadContext"]["rightFileEnd"]["line"] == 12
     assert suggestion_body["comments"][0]["commentType"] == "codeChange"

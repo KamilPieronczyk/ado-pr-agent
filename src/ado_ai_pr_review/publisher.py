@@ -58,8 +58,9 @@ class SuggestionPublisher:
         }
         if is_inline:
             line_end = finding.line_end or finding.line_start
+            file_path = finding.file_path if finding.file_path.startswith("/") else f"/{finding.file_path}"
             body["threadContext"] = {
-                "filePath": finding.file_path,
+                "filePath": file_path,
                 "rightFileStart": {"line": finding.line_start, "offset": 1},
                 "rightFileEnd": {"line": line_end, "offset": 1},
             }
@@ -95,7 +96,7 @@ class SuggestionPublisher:
                 "status": "active",
                 "properties": {"adoAiReview.kind": {"$type": "System.String", "$value": "fix-suggestion"}},
                 "threadContext": {
-                    "filePath": suggestion.file_path,
+                    "filePath": suggestion.file_path if suggestion.file_path.startswith("/") else f"/{suggestion.file_path}",
                     "rightFileStart": {"line": suggestion.line_start, "offset": 1},
                     "rightFileEnd": {"line": suggestion.line_end, "offset": 1},
                 },
