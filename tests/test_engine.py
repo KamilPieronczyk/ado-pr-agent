@@ -9,6 +9,7 @@ from ado_ai_pr_review.models import (
     FindingSeverity,
     FindingType,
     FixCandidate,
+    FixPlanResult,
     ReviewCommand,
     ReviewResult,
 )
@@ -77,6 +78,9 @@ class _MockLLM:
             raise self._raises
         assert self._result is not None
         return self._result
+
+    def fix_plan_json(self, system_prompt: str, user_prompt: str) -> FixPlanResult:
+        raise NotImplementedError
 
 
 def _make_review_result(summary: str = "ok") -> ReviewResult:
@@ -165,6 +169,20 @@ def test_engine_delegates_fix_branch_to_platform(tmp_path: Path) -> None:
     engine.run()
 
     assert platform.fix_branch_args is not None
+
+
+def test_engine_runs_review_without_config_file(tmp_path: Path) -> None:
+    from ado_ai_pr_review.engine import ReviewEngine
+
+    request = _make_request(command=ReviewCommand.REVIEW, repo_root=tmp_path)
+    llm = _MockLLM(result=_make_review_result("no config needed"))
+    platform = _MockPlatform(request=request)
+    engine = ReviewEngine(platform=platform, model=llm, repo_root=tmp_path)
+    cmd = engine.run()
+
+    assert cmd is ReviewCommand.REVIEW
+    assert platform.review_result is not None
+    assert platform.review_result.summary == "no config needed"
 
 
 def test_review_result_is_value_object() -> None:
