@@ -42,6 +42,7 @@ class _MockPlatform:
         self._load_raises = load_raises
         self.onboarding_called = False
         self.review_result: ReviewResult | None = None
+        self.fix_result: FixPlanResult | None = None
         self.error: BaseException | None = None
         self.fix_branch_args: tuple[object, ...] | None = None
         self.fix_branch_return = False
@@ -57,6 +58,9 @@ class _MockPlatform:
 
     def publish_review(self, result: ReviewResult) -> None:
         self.review_result = result
+
+    def publish_fix_result(self, result: FixPlanResult) -> None:
+        self.fix_result = result
 
     def publish_error(self, exc: BaseException) -> None:
         self.error = exc
@@ -80,7 +84,10 @@ class _MockLLM:
         return self._result
 
     def fix_plan_json(self, system_prompt: str, user_prompt: str) -> FixPlanResult:
-        raise NotImplementedError
+        self.calls += 1
+        if self._raises is not None:
+            raise self._raises
+        return FixPlanResult(summary="ok")
 
 
 def _make_review_result(summary: str = "ok") -> ReviewResult:
