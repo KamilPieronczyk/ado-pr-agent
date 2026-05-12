@@ -7,6 +7,7 @@ from pathlib import Path
 from shlex import join as shell_join
 
 from ado_ai_pr_review.errors import CommandExecutionError
+from ado_ai_pr_review.redaction import SecretRedactor
 from ado_ai_pr_review.tool_policy import CommandPolicy
 
 
@@ -27,7 +28,7 @@ class CliRunner:
         max_output_chars: int = 200_000,
     ) -> None:
         self._policy = policy
-        self._secrets = tuple(secret for secret in secrets or () if secret)
+        self._redactor = SecretRedactor(secrets or ())
         self._timeout_seconds = timeout_seconds
         self._max_output_chars = max_output_chars
 
@@ -80,9 +81,7 @@ class CliRunner:
 
     def _cap_and_redact(self, output: str) -> str:
         # Output is capped after subprocess.run captures it. A streaming cap is future hardening.
-        redacted = output
-        for secret in self._secrets:
-            redacted = redacted.replace(secret, "[REDACTED]")
+        redacted = self._redactor.redact(output)
         return redacted[: self._max_output_chars]
 
     def _diagnostic_snippet(self, stderr: str, stdout: str) -> str:
