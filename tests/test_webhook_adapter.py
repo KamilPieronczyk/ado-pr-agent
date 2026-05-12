@@ -127,7 +127,7 @@ def test_create_config_pr_creates_branch_commits_and_opens_pr(tmp_path: Path) ->
     adapter._ado = ado_mock
     adapter._target_ref = "refs/heads/main"
 
-    with patch("ado_ai_pr_review.adapters.webhook.Bootstrapper") as bootstrap_cls:
+    with patch("ado_ai_pr_review.bootstrap.Bootstrapper") as bootstrap_cls:
         bootstrap_cls.return_value.create_missing_files.return_value = [
             ".ado-ai-review.yml",
             ".ado-ai-review/instructions/reviewer.md",
@@ -163,7 +163,7 @@ def test_create_config_pr_returns_false_when_no_files_created(tmp_path: Path) ->
     adapter._ado = MagicMock()
     adapter._target_ref = "refs/heads/main"
 
-    with patch("ado_ai_pr_review.adapters.webhook.Bootstrapper") as bootstrap_cls:
+    with patch("ado_ai_pr_review.bootstrap.Bootstrapper") as bootstrap_cls:
         bootstrap_cls.return_value.create_missing_files.return_value = []
         result = adapter.create_config_pr()
 
@@ -181,7 +181,7 @@ def test_create_config_pr_returns_true_when_ado_pr_creation_fails(tmp_path: Path
     adapter._ado = ado_mock
     adapter._target_ref = "refs/heads/main"
 
-    with patch("ado_ai_pr_review.adapters.webhook.Bootstrapper") as bootstrap_cls:
+    with patch("ado_ai_pr_review.bootstrap.Bootstrapper") as bootstrap_cls:
         bootstrap_cls.return_value.create_missing_files.return_value = [".ado-ai-review.yml"]
         result = adapter.create_config_pr()
 

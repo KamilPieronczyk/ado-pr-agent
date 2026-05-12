@@ -10,7 +10,6 @@ from ado_ai_pr_review.ado_rest import AdoRestClient
 from ado_ai_pr_review.ado_toolset import AdoToolset
 from ado_ai_pr_review.adapters.webhook_payload import AdoWebhookPayload
 from ado_ai_pr_review.auth import AdoAuthStrategy
-from ado_ai_pr_review.bootstrap import Bootstrapper
 from ado_ai_pr_review.cli_runner import CliRunner
 from ado_ai_pr_review.commands import CommandRouter
 from ado_ai_pr_review.git_toolset import GitToolset
@@ -190,6 +189,8 @@ class AdoWebhookAdapter:
         if self._git is None or self._ado is None:
             logger.warning("create_config_pr called before load_request(); skipping")
             return False
+        from ado_ai_pr_review.bootstrap import Bootstrapper
+
         created = Bootstrapper().create_missing_files(self._temp_dir)
         if not created:
             return False
