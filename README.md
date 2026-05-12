@@ -256,6 +256,46 @@ Available `--command` values: `review`, `security`, `fix`.
 No ADO environment variables are needed in local mode. Bootstrap files are created in the
 current repository if they are missing.
 
+### Azure OpenAI Authentication in Local Mode
+
+Three authentication options are supported when `AZURE_OPENAI_API_KEY` is not set:
+
+**Interactive (az login) — for developer workstations:**
+
+```bash
+az login
+export AZURE_OPENAI_BASE_URL=https://acme-openai.openai.azure.com/openai/v1/
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+unset AZURE_OPENAI_API_KEY
+ado-ai-pr-review local --command review --target-branch main
+```
+
+**Service principal — for non-interactive / CI use:**
+
+```bash
+export AZURE_TENANT_ID=<tenant-id>
+export AZURE_CLIENT_ID=<client-id>
+export AZURE_CLIENT_SECRET=<client-secret>
+export AZURE_OPENAI_BASE_URL=https://acme-openai.openai.azure.com/openai/v1/
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+ado-ai-pr-review local --command review --target-branch main
+```
+
+Both paths use `DefaultAzureCredential` from the Azure Identity SDK, which picks up `az login`
+sessions, service principal environment variables, managed identity, and other credential
+sources automatically (in that order).
+
+**API key — for users with a direct OpenAI API key:**
+
+```bash
+export AZURE_OPENAI_API_KEY=<api-key>
+export AZURE_OPENAI_BASE_URL=https://acme-openai.openai.azure.com/openai/v1/
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o
+ado-ai-pr-review local --command review --target-branch main
+```
+
+When `AZURE_OPENAI_API_KEY` is set it takes priority and `DefaultAzureCredential` is not used.
+
 ## Webhook / Container Apps
 
 The `serve` subcommand starts a FastAPI server that receives Azure DevOps service hooks and
