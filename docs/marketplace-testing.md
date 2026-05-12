@@ -28,7 +28,6 @@ docker run -p 8080:8080 \
   -e AZURE_OPENAI_BASE_URL=https://{your-openai}.openai.azure.com/openai \
   -e AZURE_OPENAI_DEPLOYMENT=gpt-4o \
   -e AZURE_OPENAI_API_KEY={api-key} \
-  -e ADO_AUTH_TOKEN={pat} \
   -e WEBHOOK_USERNAME=test \
   -e WEBHOOK_PASSWORD=testpass \
   ghcr.io/kamilpieronczyk/ado-pr-agent:latest
@@ -131,13 +130,17 @@ az deployment group create \
   --parameters \
       appName=adoaitest \
       openAiDeploymentName=gpt-4o \
-      adoAuthToken="YOUR_PAT" \
       webhookUsername=test \
       webhookPassword=testpassword123 \
   --verbose
 ```
 
-Deployment takes ~10-15 minutes. The output includes `webhookUrl` and `healthUrl`.
+Deployment takes ~10-15 minutes. The output includes `webhookUrl`, `healthUrl`, `managedIdentityClientId`, and `managedIdentityPrincipalId`.
+
+> **Post-deployment:** Add the managed identity to your Azure DevOps organization as a user with Basic access and grant it Code Read and Pull Request Threads (Read & Write) permissions. Retrieve the principal ID from the deployment outputs:
+> ```bash
+> az deployment group show -g ado-ai-test -n <deployment-name> --query properties.outputs.managedIdentityPrincipalId.value
+> ```
 
 ### 3. Verify health
 

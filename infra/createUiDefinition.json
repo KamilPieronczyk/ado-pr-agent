@@ -59,25 +59,12 @@
         "label": "Azure DevOps",
         "elements": [
           {
-            "name": "adoInfoBox",
+            "name": "adoIdentityInfoBox",
             "type": "Microsoft.Common.InfoBox",
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Create a Personal Access Token in Azure DevOps with 'Code (Read)', 'Pull Request Threads (Read & Write)', and 'Git (Read)' permissions. The token is stored securely in Azure Key Vault."
-            }
-          },
-          {
-            "name": "adoAuthToken",
-            "type": "Microsoft.Common.PasswordBox",
-            "label": {
-              "password": "Azure DevOps PAT",
-              "confirmPassword": "Confirm PAT"
-            },
-            "constraints": {
-              "required": true,
-              "regex": "^.{20,}$",
-              "validationMessage": "PAT must be at least 20 characters."
+              "text": "After deployment, add the managed identity (service principal) to your Azure DevOps organization as a user with Basic access. Grant it Code Read and Pull Request Threads (Read & Write) permissions on the target project. No PAT is required — the application authenticates using managed identity."
             }
           }
         ]
@@ -127,7 +114,6 @@
       "appName": "[steps('appConfig').appName]",
       "imageTag": "[steps('appConfig').imageTag]",
       "openAiDeploymentName": "[steps('openAiConfig').deploymentName]",
-      "adoAuthToken": "[steps('adoConfig').adoAuthToken.password]",
       "webhookUsername": "[steps('webhookConfig').webhookUsername]",
       "webhookPassword": "[steps('webhookConfig').webhookPassword.password]"
     }

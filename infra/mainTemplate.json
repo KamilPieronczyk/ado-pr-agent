@@ -28,12 +28,6 @@
         "description": "Azure OpenAI deployment name (model name)"
       }
     },
-    "adoAuthToken": {
-      "type": "securestring",
-      "metadata": {
-        "description": "Azure DevOps Personal Access Token"
-      }
-    },
     "webhookUsername": {
       "type": "string",
       "metadata": {
@@ -127,18 +121,6 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2025-05-01",
-      "name": "[concat(variables('keyVaultName'), '/ado-auth-token')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
-        "[resourceId('Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('keyVaultSecretsUserRoleId')))]"
-      ],
-      "properties": {
-        "value": "[parameters('adoAuthToken')]"
-      }
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2025-05-01",
       "name": "[concat(variables('keyVaultName'), '/webhook-password')]",
       "dependsOn": [
         "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
@@ -169,7 +151,6 @@
       "dependsOn": [
         "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
-        "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'ado-auth-token')]",
         "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), 'webhook-password')]",
         "[resourceId('Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('cognitiveServicesOpenAiUserRoleId')))]"
       ],
@@ -183,11 +164,6 @@
             "allowInsecure": false
           },
           "secrets": [
-            {
-              "name": "ado-auth-token",
-              "keyVaultUrl": "[concat('https://', variables('keyVaultName'), '.vault.azure.net/secrets/ado-auth-token')]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
-            },
             {
               "name": "webhook-password",
               "keyVaultUrl": "[concat('https://', variables('keyVaultName'), '.vault.azure.net/secrets/webhook-password')]",
@@ -222,10 +198,6 @@
                   "value": "[parameters('webhookUsername')]"
                 },
                 {
-                  "name": "ADO_AUTH_TOKEN",
-                  "secretRef": "ado-auth-token"
-                },
-                {
                   "name": "WEBHOOK_PASSWORD",
                   "secretRef": "webhook-password"
                 }
@@ -248,6 +220,14 @@
     "healthUrl": {
       "type": "string",
       "value": "[concat('https://', reference(resourceId('Microsoft.App/containerApps', variables('containerAppName')), '2026-01-01').configuration.ingress.fqdn, '/health')]"
+    },
+    "managedIdentityClientId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).clientId]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))).principalId]"
     }
   }
 }

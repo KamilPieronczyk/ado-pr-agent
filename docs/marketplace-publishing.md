@@ -67,7 +67,7 @@ The wizard has 4 steps:
 |------|--------|
 | Application | App name (3-12 chars), image tag |
 | Azure OpenAI | Model deployment name (e.g. `gpt-4o`) |
-| Azure DevOps | ADO Personal Access Token |
+| Azure DevOps | Managed identity (service principal) added to ADO org |
 | Webhook Security | Basic Auth username and password |
 
 ---
@@ -168,7 +168,7 @@ their subscription inside a managed resource group:
 |----------|-------------|---------|
 | User-assigned managed identity | `{appName}-identity` | Keyless auth from container to OpenAI and Key Vault |
 | Azure OpenAI (S0) | `{appName}-openai` | Customer's own OpenAI instance |
-| Key Vault | `{appName}-kv` | Stores ADO PAT and webhook password |
+| Key Vault | `{appName}-kv` | Stores webhook password |
 | Container Apps environment | `{appName}-env` | Runtime environment |
 | Container App | `{appName}` | Webhook server on port 8080 |
 | Role assignment × 2 | — | Identity → Key Vault Secrets User; Identity → Cognitive Services OpenAI User |
