@@ -7,6 +7,7 @@ from ado_ai_pr_review.bootstrap import Bootstrapper
 from ado_ai_pr_review.config import ReviewConfig
 from ado_ai_pr_review.context import ContextSelector
 from ado_ai_pr_review.indexer import RepoIndexer
+from ado_ai_pr_review.log_context import bind_request_context
 from ado_ai_pr_review.models import (
     FindingType,
     FixCandidate,
@@ -47,64 +48,65 @@ class ReviewEngine:
             self._platform.publish_error(exc)
             raise
 
-        if request.command is ReviewCommand.SKIP:
-            logger.debug("skipping event: unrecognised inline comment, no action taken")
-            return ReviewCommand.SKIP
+        with bind_request_context(request.pr_context.request_id):
+            if request.command is ReviewCommand.SKIP:
+                logger.debug("skipping event: unrecognised inline comment, no action taken")
+                return ReviewCommand.SKIP
 
-        if request.command is ReviewCommand.ONBOARDING:
-            self._platform.publish_onboarding()
-            return ReviewCommand.ONBOARDING
+            if request.command is ReviewCommand.ONBOARDING:
+                self._platform.publish_onboarding()
+                return ReviewCommand.ONBOARDING
 
-        entries = RepoIndexer(exclude=config.context.index.exclude).build(request.repo_root)
-        selector = ContextSelector(max_files=config.context.dynamic_context.max_files)
-        prefer_tags = {"security"} if request.command is ReviewCommand.SECURITY else set()
-        if request.command is ReviewCommand.SECURITY:
-            primary_instruction = config.instructions.security
-        elif request.command is ReviewCommand.FIX:
-            primary_instruction = config.instructions.fixer
-        else:
-            primary_instruction = config.instructions.reviewer
+            entries = RepoIndexer(exclude=config.context.index.exclude).build(request.repo_root)
+            selector = ContextSelector(max_files=config.context.dynamic_context.max_files)
+            prefer_tags = {"security"} if request.command is ReviewCommand.SECURITY else set()
+            if request.command is ReviewCommand.SECURITY:
+                primary_instruction = config.instructions.security
+            elif request.command is ReviewCommand.FIX:
+                primary_instruction = config.instructions.fixer
+            else:
+                primary_instruction = config.instructions.reviewer
 
-        selected = selector.select(
-            repo_root=request.repo_root,
-            guidance_paths=[
-                primary_instruction,
-                *config.guidelines.code_style,
-                *config.guidelines.security,
-            ],
-            entries=entries,
-            prefer_tags=prefer_tags,
-        )
-        local_security_summary = f"Local findings: {len(request.local_findings)}"
-
-        if request.command is ReviewCommand.FIX:
-            return self._run_fix(request, config, selected, local_security_summary)
-
-        try:
-            result = ReviewOrchestrator(self._model).run(
-                command=request.command,
-                guidance=selected.always_on_guidance,
-                selected_files=selected.dynamic_files,
-                diff_text=request.diff_text,
-                local_security_summary=local_security_summary,
+            selected = selector.select(
+                repo_root=request.repo_root,
+                guidance_paths=[
+                    primary_instruction,
+                    *config.guidelines.code_style,
+                    *config.guidelines.security,
+                ],
+                entries=entries,
+                prefer_tags=prefer_tags,
             )
-        except Exception as exc:
-            logger.error("review failed: %s", exc)
-            self._platform.publish_error(exc)
-            raise
+            local_security_summary = f"Local findings: {len(request.local_findings)}"
 
-        result.findings.extend(request.local_findings)
-        self._platform.publish_review(result)
+            if request.command is ReviewCommand.FIX:
+                return self._run_fix(request, config, selected, local_security_summary)
 
-        metrics = ReviewMetrics(
-            command=request.command.value,
-            pr_id=request.pr_context.pr_id or 0,
-            findings_count=len(result.findings),
-            inline_suggestions_count=sum(1 for f in result.findings if f.suggested_code),
-            fix_pr_created=False,
-        )
-        logger.info("review metrics: %s", metrics.to_payload())
-        return request.command
+            try:
+                result = ReviewOrchestrator(self._model).run(
+                    command=request.command,
+                    guidance=selected.always_on_guidance,
+                    selected_files=selected.dynamic_files,
+                    diff_text=request.diff_text,
+                    local_security_summary=local_security_summary,
+                )
+            except Exception as exc:
+                logger.error("review failed: %s", exc)
+                self._platform.publish_error(exc)
+                raise
+
+            result.findings.extend(request.local_findings)
+            self._platform.publish_review(result)
+
+            metrics = ReviewMetrics(
+                command=request.command.value,
+                pr_id=request.pr_context.pr_id or 0,
+                findings_count=len(result.findings),
+                inline_suggestions_count=sum(1 for f in result.findings if f.suggested_code),
+                fix_pr_created=False,
+            )
+            logger.info("review metrics", extra=metrics.to_payload())
+            return request.command
 
     def _run_fix(self, request: ReviewRequest, config: ReviewConfig, selected: SelectedContext, local_security_summary: str) -> ReviewCommand:
         try:
@@ -149,7 +151,7 @@ class ReviewEngine:
                 inline_suggestions_count=sum(1 for f in result.findings if f.suggested_code),
                 fix_pr_created=fix_pr_created,
             )
-            logger.info("review metrics: %s", metrics.to_payload())
+            logger.info("review metrics", extra=metrics.to_payload())
             return request.command
 
         except Exception as exc:

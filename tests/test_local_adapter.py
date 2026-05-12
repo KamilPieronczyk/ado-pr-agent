@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from pytest_mock import MockerFixture
 
 from ado_ai_pr_review.models import ReviewCommand
 from ado_ai_pr_review.tool_policy import CommandPolicy
@@ -131,3 +132,25 @@ def test_local_adapter_create_fix_branch_returns_false_when_no_allowed_candidate
     git.checkout_new_branch.assert_not_called()
     out = capsys.readouterr().out
     assert "No mechanical fix candidates" in out
+
+
+def test_local_adapter_sets_request_id_on_pr_context(tmp_path: Path, mocker: MockerFixture) -> None:
+    from ado_ai_pr_review.adapters.local import LocalCliAdapter
+    from ado_ai_pr_review.cli_runner import CliRunner
+    from ado_ai_pr_review.git_toolset import GitToolset
+
+    runner = mocker.Mock(spec=CliRunner)
+    runner.run.return_value = MagicMock(stdout="feature/local\n", returncode=0, stderr="", argv=[])
+    git = mocker.Mock(spec=GitToolset)
+    git.diff.return_value = "diff --git a/src/app.py b/src/app.py\n"
+    adapter = LocalCliAdapter(
+        repo_root=tmp_path,
+        command=ReviewCommand.REVIEW,
+        _runner=runner,
+        _git=git,
+        request_id="local-req-1",
+    )
+
+    request = adapter.load_request()
+
+    assert request.pr_context.request_id == "local-req-1"

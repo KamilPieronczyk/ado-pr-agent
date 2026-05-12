@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from pathlib import Path
 
 import typer
@@ -25,6 +26,7 @@ class LocalCliAdapter:
         repo_root: Path,
         command: ReviewCommand,
         target_branch: str = "main",
+        request_id: str | None = None,
         *,
         _runner: CliRunner | None = None,
         _git: GitToolset | None = None,
@@ -32,6 +34,7 @@ class LocalCliAdapter:
         self._repo_root = repo_root
         self._command = command
         self._target_branch = target_branch
+        self._request_id = request_id if request_id is not None else f"local-{secrets.token_hex(8)}"
         self._runner = _runner or CliRunner(policy=CommandPolicy.default())
         self._git = _git or GitToolset(runner=self._runner, repo_root=repo_root)
 
@@ -56,6 +59,7 @@ class LocalCliAdapter:
                 target_branch=self._target_branch,
                 is_fork=False,
                 build_id="local",
+                request_id=self._request_id,
             ),
         )
 

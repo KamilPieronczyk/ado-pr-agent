@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from pathlib import Path
 from typing import Annotated
 
@@ -55,7 +56,8 @@ def local(
     """Run a local review against the current branch diff."""
     configure_logging(verbose=verbose)
     root = Path(repo_root).resolve()
-    adapter = LocalCliAdapter(repo_root=root, command=command, target_branch=target_branch)
+    request_id = f"local-{secrets.token_hex(8)}"
+    adapter = LocalCliAdapter(repo_root=root, command=command, target_branch=target_branch, request_id=request_id)
     model = _build_model(llm)
     engine = ReviewEngine(platform=adapter, model=model, repo_root=root)
     try:
