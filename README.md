@@ -292,6 +292,7 @@ ado-ai-pr-review serve --host 0.0.0.0 --port 8080
 
 The server exposes:
 - `POST /webhook/ado` — ADO service hook receiver (returns 200 immediately, processes async)
+  The response body includes a `request_id` field. Callers may pass `X-Request-ID` or `X-Correlation-ID` to set a custom request ID; otherwise one is generated automatically.
 - `GET /health` — liveness/readiness probe for Container Apps
 
 ## Security Boundary
@@ -302,6 +303,8 @@ are redacted before any model call.
 
 Fix commits are never written directly to the PR source branch. They go to a separate
 `ai-fix/...` branch and a fix PR.
+
+Repository file reads, context indexing, command cwd values, and mechanical fix writes are constrained to the request workspace. The worker rejects parent traversal, absolute paths outside the workspace, and symlink targets that could escape into another cloned repository. Runtime logs are emitted as JSON and include `request_id`; configured secrets and known token formats are redacted before output.
 
 ## Local Development
 
