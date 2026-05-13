@@ -14,6 +14,6 @@ class SkipHandler:
         request: ReviewRequest,
         platform: PlatformAdapter,
         model: LLMPort,
-        config: ReviewConfig,
+        config: ReviewConfig | None,
     ) -> None:
         logger.debug("skipping event: unrecognised inline comment, no action taken")

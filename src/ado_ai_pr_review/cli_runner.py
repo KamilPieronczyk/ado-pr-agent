@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -10,6 +11,8 @@ from ado_ai_pr_review.errors import CommandExecutionError
 from ado_ai_pr_review.redaction import SecretRedactor
 from ado_ai_pr_review.tool_policy import CommandPolicy
 from ado_ai_pr_review.workspace import ProcessContext
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -42,7 +45,11 @@ class CliRunner:
         env: Mapping[str, str] | None = None,
         check: bool = True,
     ) -> CommandResult:
-        self._policy.validate(argv)
+        try:
+            self._policy.validate(argv)
+        except Exception:
+            logger.debug("command rejected: %s", self._redactor.redact(shell_join(argv)))
+            raise
         try:
             effective_cwd = self._process_context.require_cwd(cwd) if self._process_context else cwd
             effective_env = self._process_context.build_env(env) if self._process_context else env

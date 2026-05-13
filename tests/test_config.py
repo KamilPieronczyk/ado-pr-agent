@@ -37,6 +37,31 @@ def test_config_loader_raises_configuration_error_when_missing(tmp_path: Path) -
         ReviewConfig.load(tmp_path)
 
 
+def test_load_or_default_returns_valid_config_when_file_missing(tmp_path: Path) -> None:
+    config = ReviewConfig.load_or_default(tmp_path)
+
+    assert config.version == 1
+    assert config.commands.review.enabled is True
+    assert config.review.max_findings == 20
+    assert config.instructions.reviewer == ".ado-ai-review/instructions/reviewer.md"
+
+
+def test_load_or_default_loads_file_when_present(tmp_path: Path) -> None:
+    write_config(tmp_path)
+
+    config = ReviewConfig.load_or_default(tmp_path)
+
+    assert config.version == 1
+    assert config.instructions.reviewer == ".ado-ai-review/instructions/reviewer.md"
+
+
+def test_load_or_default_still_raises_for_invalid_yaml(tmp_path: Path) -> None:
+    (tmp_path / ".ado-ai-review.yml").write_text("version: [\n", encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match=r"Invalid \.ado-ai-review\.yml"):
+        ReviewConfig.load_or_default(tmp_path)
+
+
 def test_config_loader_raises_configuration_error_for_malformed_yaml(
     tmp_path: Path,
 ) -> None:

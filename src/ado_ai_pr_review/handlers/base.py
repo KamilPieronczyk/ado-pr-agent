@@ -15,7 +15,7 @@ class CommandHandler(Protocol):
         request: ReviewRequest,
         platform: PlatformAdapter,
         model: LLMPort,
-        config: ReviewConfig,
+        config: ReviewConfig | None,
     ) -> None: ...
 
 

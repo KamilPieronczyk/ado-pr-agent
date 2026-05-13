@@ -29,7 +29,10 @@ def test_command_policy_rejects_unknown_binary() -> None:
         ["git", "status", "--short"],
         ["git", "diff", "--name-status", "origin/main...HEAD"],
         ["git", "fetch", "origin", "--prune"],
+        ["git", "fetch", "origin", "main"],
+        ["git", "fetch", "origin", "feature/my-branch"],
         ["git", "checkout", "-B", "review/branch-1"],
+        ["git", "checkout", "-B", "ai-config/setup", "feat/todo-cli"],
         ["git", "add", "src/file.py", "tests/test_file.py"],
         ["git", "commit", "-m", "review changes"],
         ["git", "rev-parse", "HEAD"],
@@ -84,6 +87,33 @@ def test_command_policy_allows_plain_https_git_clone() -> None:
     ])
 
 
+def test_command_policy_allows_visualstudio_com_clone_url() -> None:
+    CommandPolicy.default().validate([
+        "git",
+        "clone",
+        "--depth",
+        "50",
+        "--branch",
+        "feature/auth",
+        "https://acme.visualstudio.com/Payments/_git/payments-api",
+        "/tmp/work",
+    ])
+
+
+def test_command_policy_allows_ado_org_prefix_clone_url() -> None:
+    # ADO UI generates URLs of the form https://{org}@dev.azure.com/{org}/...
+    CommandPolicy.default().validate([
+        "git",
+        "clone",
+        "--depth",
+        "50",
+        "--branch",
+        "feat/todo-cli",
+        "https://Euvic-Organization@dev.azure.com/Euvic-Organization/MyProject/_git/myrepo",
+        "/tmp/work",
+    ])
+
+
 def test_command_policy_rejects_credential_embedded_clone_url() -> None:
     with pytest.raises(CommandRejectedError):
         CommandPolicy.default().validate([
@@ -94,5 +124,19 @@ def test_command_policy_rejects_credential_embedded_clone_url() -> None:
             "--branch",
             "feature/auth",
             "https://:secret@dev.azure.com/acme/Payments/_git/payments-api",
+            "/tmp/work",
+        ])
+
+
+def test_command_policy_rejects_credential_embedded_visualstudio_clone_url() -> None:
+    with pytest.raises(CommandRejectedError):
+        CommandPolicy.default().validate([
+            "git",
+            "clone",
+            "--depth",
+            "50",
+            "--branch",
+            "feature/auth",
+            "https://:secret@acme.visualstudio.com/Payments/_git/payments-api",
             "/tmp/work",
         ])

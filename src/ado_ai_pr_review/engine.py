@@ -25,8 +25,6 @@ class ReviewEngine:
         self._repo_root = repo_root
 
     def run(self) -> ReviewCommand:
-        config = ReviewConfig.load(self._repo_root)
-
         try:
             request = self._platform.load_request()
         except Exception as exc:
@@ -38,5 +36,11 @@ class ReviewEngine:
             handler = HANDLERS.get(request.command)
             if handler is None:
                 raise ValueError(f"No handler registered for command {request.command!r}")
+            # Config requires the repo to be present on disk; skip for commands
+            # that don't need it (ONBOARDING, SKIP) so repos without a config
+            # file can still be onboarded via webhook.
+            config: ReviewConfig | None = None
+            if request.command not in (ReviewCommand.ONBOARDING, ReviewCommand.SKIP):
+                config = ReviewConfig.load_or_default(self._repo_root)
             handler.handle(request, self._platform, self._model, config)
             return request.command

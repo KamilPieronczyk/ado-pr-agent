@@ -10,6 +10,6 @@ class OnboardingHandler:
         request: ReviewRequest,
         platform: PlatformAdapter,
         model: LLMPort,
-        config: ReviewConfig,
+        config: ReviewConfig | None,
     ) -> None:
         platform.publish_onboarding()

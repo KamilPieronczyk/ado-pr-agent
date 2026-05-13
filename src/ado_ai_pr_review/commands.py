@@ -5,6 +5,8 @@ from typing import Any
 
 from ado_ai_pr_review.models import ReviewCommand
 
+_BOT_MARKER = "<!-- ado-ai-pr-review -->"
+
 
 @dataclass(frozen=True)
 class CommandDecision:
@@ -19,6 +21,8 @@ class CommandRouter:
         for thread in threads_payload.get("value", []):
             # Skip threads created by the agent itself to avoid self-triggering.
             if "adoAiReview.kind" in thread.get("properties", {}):
+                continue
+            if any(_BOT_MARKER in str(c.get("content", "")) for c in thread.get("comments", [])):
                 continue
             thread_id = int(thread.get("id", 0))
             published = str(thread.get("publishedDate", ""))
@@ -38,13 +42,14 @@ class CommandRouter:
 
     @staticmethod
     def _detect(content: str) -> ReviewCommand | None:
-        lowered = content.lower()
-        if "/ai fix" in lowered:
-            return ReviewCommand.FIX
-        if "/ai security" in lowered:
-            return ReviewCommand.SECURITY
-        if "/ai review" in lowered:
-            return ReviewCommand.REVIEW
+        for line in content.lower().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("/ai fix"):
+                return ReviewCommand.FIX
+            if stripped.startswith("/ai security"):
+                return ReviewCommand.SECURITY
+            if stripped.startswith("/ai review"):
+                return ReviewCommand.REVIEW
         return None
 
     @staticmethod

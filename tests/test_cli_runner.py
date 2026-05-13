@@ -39,6 +39,23 @@ def test_cli_runner_rejected_command_does_not_run_subprocess(
     run.assert_not_called()
 
 
+def test_cli_runner_logs_rejected_command_at_debug(
+    mocker: MockerFixture,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    runner = CliRunner(policy=CommandPolicy.default(), secrets=["s3cr3t"])
+
+    with caplog.at_level(logging.DEBUG, logger="ado_ai_pr_review.cli_runner"):
+        with pytest.raises(CommandRejectedError):
+            runner.run(["bash", "-lc", "echo s3cr3t"], cwd=tmp_path)
+
+    assert any("command rejected" in r.message for r in caplog.records)
+    assert all("s3cr3t" not in r.message for r in caplog.records)
+
+
 def test_cli_runner_redacts_secret_stderr(mocker: MockerFixture, tmp_path: Path) -> None:
     completed = subprocess.CompletedProcess(
         args=["git", "status"],

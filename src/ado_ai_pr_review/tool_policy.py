@@ -9,6 +9,10 @@ _REMOTE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _SAFE_BRANCH_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
 _SAFE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _SAFE_REF_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*(?:\.\.\.?[A-Za-z0-9][A-Za-z0-9._/-]*)?")
+_VISUALSTUDIO_RE = re.compile(r"https://[A-Za-z0-9][A-Za-z0-9-]*\.visualstudio\.com/")
+_ADO_ORG_PREFIX_RE = re.compile(r"https://[A-Za-z0-9][A-Za-z0-9._-]*@dev\.azure\.com/")
+# Matches embedded credentials of the form user:pass@ or :token@ — always unsafe.
+_CREDENTIALS_RE = re.compile(r"://[^/]*:[^/]*@")
 
 
 def _matches_shape(argv: list[str], shape: tuple[str, ...]) -> bool:
@@ -39,6 +43,16 @@ def _is_safe_relative_path(value: str) -> bool:
 
 def _is_safe_local_path(value: str) -> bool:
     return bool(value) and not value.startswith("-") and ".." not in value and "\\" not in value
+
+
+def _is_safe_ado_url(value: str) -> bool:
+    if _CREDENTIALS_RE.search(value):
+        return False
+    return (
+        value.startswith("https://dev.azure.com/")
+        or bool(_ADO_ORG_PREFIX_RE.match(value))
+        or bool(_VISUALSTUDIO_RE.match(value))
+    )
 
 
 def _is_safe_ref_or_range(value: str) -> bool:
@@ -78,9 +92,11 @@ class CommandPolicy:
         if _matches_shape(argv, ("git", "diff")):
             return _is_allowed_git_diff(argv)
         if len(argv) == 4 and _matches_shape(argv, ("git", "fetch")):
-            return _is_safe_remote(argv[2]) and argv[3] == "--prune"
+            return _is_safe_remote(argv[2]) and (argv[3] == "--prune" or _is_safe_branch(argv[3]))
         if len(argv) == 4 and _matches_shape(argv, ("git", "checkout", "-B")):
             return _is_safe_branch(argv[3])
+        if len(argv) == 5 and _matches_shape(argv, ("git", "checkout", "-B")):
+            return _is_safe_branch(argv[3]) and _is_safe_branch(argv[4])
         if len(argv) >= 3 and _matches_shape(argv, ("git", "add")):
             return all(_is_safe_relative_path(path) for path in argv[2:])
         if len(argv) == 4 and _matches_shape(argv, ("git", "commit", "-m")):
@@ -98,8 +114,7 @@ class CommandPolicy:
                 argv[3].isdigit()
                 and argv[4] == "--branch"
                 and _is_safe_branch(argv[5])
-                and argv[6].startswith("https://dev.azure.com/")
-                and "@" not in argv[6]
+                and _is_safe_ado_url(argv[6])
                 and _is_safe_local_path(argv[7])
             )
         return False

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Annotated, Literal
+
+logger = logging.getLogger(__name__)
 
 import yaml
 from pydantic import (
@@ -34,10 +37,10 @@ class CommandsConfig(BaseModel):
 
 class InstructionsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    reviewer: NonBlankStr
-    security: NonBlankStr
-    indexer: NonBlankStr
-    fixer: NonBlankStr
+    reviewer: NonBlankStr = ".ado-ai-review/instructions/reviewer.md"
+    security: NonBlankStr = ".ado-ai-review/instructions/security.md"
+    indexer: NonBlankStr = ".ado-ai-review/instructions/indexer.md"
+    fixer: NonBlankStr = ".ado-ai-review/instructions/fixer.md"
 
 
 class GuidelinesConfig(BaseModel):
@@ -145,7 +148,7 @@ class ReviewConfig(BaseModel):
 
     version: int
     commands: CommandsConfig = Field(default_factory=CommandsConfig)
-    instructions: InstructionsConfig
+    instructions: InstructionsConfig = Field(default_factory=InstructionsConfig)
     guidelines: GuidelinesConfig = Field(default_factory=GuidelinesConfig)
     review: ReviewSettings = Field(default_factory=ReviewSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
@@ -165,6 +168,21 @@ class ReviewConfig(BaseModel):
         path = repo_root / ".ado-ai-review.yml"
         if not path.exists():
             raise ConfigurationError("Missing .ado-ai-review.yml")
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            return cls.model_validate(raw)
+        except (yaml.YAMLError, ValidationError) as exc:
+            raise ConfigurationError(f"Invalid .ado-ai-review.yml: {exc}") from exc
+
+    @classmethod
+    def load_or_default(cls, repo_root: Path) -> ReviewConfig:
+        path = repo_root / ".ado-ai-review.yml"
+        if not path.exists():
+            logger.warning(
+                "No .ado-ai-review.yml found; running with built-in defaults. "
+                "Add a .ado-ai-review.yml to customise review behaviour.",
+            )
+            return cls.model_validate({"version": 1})
         try:
             raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             return cls.model_validate(raw)
